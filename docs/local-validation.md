@@ -40,13 +40,15 @@ Without flags, `local_ci.py` also supports development checks on uncommitted cha
 - Existing workflow firewall, allow-list, and permission-mode hardening.
 - Every integration's standard-library unit suite, including privacy tests once present.
 - Copilot proxy authentication and native/translated protocol smoke tests with isolated fixture credentials, without real login or paid model calls.
-- Typechecking every mod and running every mod's tests, including upstream mods.
+- Typechecking every mod and running every enabled test, including upstream mods. The explicitly user-approved sec-default registration quarantine below is excluded and reported, not marked passed.
 - Whitespace errors against committed HEAD.
 
 The retained issue/comment workflows no longer receive automatic event payloads. Their forge actions are not run locally. Only dispatch handlers already designed for manual inputs should be invoked manually; retaining a workflow is not a promise that an issue-only handler works without its original payload. Advisory PR comments and issue-management analytics are consequently not automatic. Any new workflow imported during sync must be made manual-only before publishing a customization commit.
 
 ## Existing upstream compatibility failure
 
-The published Claude Code 2.1.284 build rejects `prompt.compose` used by upstream `sec-default`. This is the existing source/runtime mismatch from `main`, not a reason to skip the suite or return success. The full local gate fails on it and blocks future customization pushes until a compatible engine build or a legitimate upstream/API correction is available. Record the actual failing suite and engine version; do not remove the security hook to make CI pass.
+The published Claude Code 2.1.284 build rejects `prompt.compose` used by upstream `sec-default`. At the user's explicit request, only its 42 registration tests are disabled by retaining their unchanged source as `mods/sec-default/tests/register.disabled.ts`; the native runner discovers `.test.ts`/`.test.tsx`, not `.disabled.ts`. The other 15 sec-default tests still run. TypeScript still checks the disabled file, and the runtime security hook is unchanged. Both the local gate and manual Mod tests workflow use `check_mods.py`, which prominently reports this disabled coverage. A green gate is **not** evidence that registration security behavior was tested.
+
+Restore the filename to `register.test.ts` when a compatible engine or legitimate upstream/API correction is available, then run the complete suite. No other checks are disabled, no pre-push bypass is permitted, and no security hook may be removed to make validation pass.
 
 A pass on Linux is not native Windows/macOS evidence. Windows job assignment and Python redirector regressions require Windows; mark unavailable platforms as validation gaps. The local gate does not modify server merge rules or fix unrelated test failures.

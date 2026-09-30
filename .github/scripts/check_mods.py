@@ -1,4 +1,4 @@
-"""Run every mod test suite; missing commands and unsupported events fail CI."""
+"""Run every enabled mod test; report the user-approved compatibility quarantine."""
 
 from pathlib import Path
 import os
@@ -8,8 +8,12 @@ import sys
 import tempfile
 
 
+ROOT = Path(__file__).resolve().parents[2]
+DISABLED_REGISTER = 'mods/sec-default/tests/register.disabled.ts'
+
+
 def main():
-    root = Path(__file__).resolve().parents[2]
+    root = ROOT
     claude = shutil.which('claude')
     if claude is None:
         raise RuntimeError('Install a compatible Claude Code build before validation.')
@@ -29,6 +33,13 @@ def main():
         mods = [path.parent for path in sorted((root / 'mods').glob('*/tests'))]
         if not mods:
             raise RuntimeError('No mod test suites found.')
+        if (root / DISABLED_REGISTER).is_file():
+            print(
+                f'DISABLED (not a pass): {DISABLED_REGISTER} — registration tests require '
+                'prompt.compose, rejected by Claude Code 2.1.284. Restore register.test.ts '
+                'when a compatible engine is available. All other sec-default tests still run.',
+                flush=True,
+            )
         for mod in mods:
             print(f'== {mod.name} ==', flush=True)
             result = subprocess.run(

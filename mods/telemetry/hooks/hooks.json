@@ -1,5 +1,5 @@
 {
-  "description": "Plugin analytics: hooks on telemetry.log and telemetry.mark queue first-party rows over $.session, $.env, $.settings, $.fs, $.process, $.clock and $.http beneath, the noun added in engine.create where the engine has none; rows go out in batches; sends nothing wherever the CLI's analytics are off",
+  "description": "Plugin analytics disabled: validate and discard telemetry.log and telemetry.mark for both first-party and collector destinations; preserve the caller-tier gate; never collect context, queue rows, or export",
   "modules": [
     "./register.ts"
   ]

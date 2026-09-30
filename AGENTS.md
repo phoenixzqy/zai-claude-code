@@ -18,6 +18,7 @@ Guidance for Claude Code and other coding agents working in this repository.
 - Hosted workflows on customization branches are manual-only (`workflow_dispatch`). This includes issue, comment, schedule, push, and PR automation. Keep their security protections and validate them locally; do not restore automatic triggers during upstream syncs.
 - Every non-deletion push from a customization checkout runs the complete local suite against a clean committed HEAD. The pushed commit tips must match HEAD. Deletion-only pushes have no source tree to validate.
 - Do not bypass installed hooks, silently skip unavailable tests, install dependencies during a push, or turn an inherited failure into a pass. Report tool/API incompatibilities and fix them separately; local CI must fail on them too.
+- The sole user-approved compatibility quarantine is `mods/sec-default/tests/register.disabled.ts`: its 42 registration tests need `prompt.compose`, which Claude Code 2.1.284 rejects. Keep their source and the runtime security hook intact; continue running the other 15 sec-default tests and typechecking everything. Report disabled coverage, not a passing registration suite. Restore the `.test.ts` filename after validating a compatible engine; do not extend this exception without explicit user instruction.
 - Linked worktrees share repository-local Git configuration. Install only from a claimed worktree and preserve any different existing hooks configuration. The hook files belong to the customization branch; the upstream-only `main` tree remains unchanged.
 - During initial adoption, publish the hook implementation before installing it. Run and report validation, including inherited failures, before that bootstrap push. Subsequent pushes must use the installed gate.
 - Local hooks are contributor-side checks, not server enforcement. Browser edits and forge merges cannot supply their validation evidence. Record native platform gaps honestly.
@@ -37,6 +38,13 @@ Agents that do not automatically discover these paths should read `AGENTS.md` an
 ## Repository scope
 
 This repository contains Claude Code documentation, plugins, mods, and examples, not the proprietary CLI engine source. Provider integrations must use supported configuration or a clearly documented external gateway; do not claim a plugin changes the engine's native authentication or model provider.
+
+## Privacy defaults
+
+- `.claude/settings.json` is the single source of truth for runtime privacy opt-outs; the privacy launcher reads it rather than maintaining another copy.
+- Keep plugin telemetry disabled for both first-party and collector destinations. Preserve entry validation and caller-tier permissions.
+- Do not re-enable analytics, OpenTelemetry exporters, remote error reports, feedback commands, or surveys in our runtime defaults.
+- Runtime opt-outs do not constitute an engine source patch or a network sandbox. Do not claim internal TUI log staging is verified without engine-level evidence.
 
 ## Security hardening for GitHub Actions
 

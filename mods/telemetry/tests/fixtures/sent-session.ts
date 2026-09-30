@@ -11,4 +11,5 @@ export type SentSession = {
   readonly runs: Args<'process.run'>[]
   readonly lines: string[]
   readonly clock: MockClock
+  readonly authorizeCalls: () => number
 }

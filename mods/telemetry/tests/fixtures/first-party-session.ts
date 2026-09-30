@@ -115,5 +115,5 @@ export function firstPartySession(
     return { value: undefined }
   })
 
-  return { posts, reads, runs, lines, clock }
+  return { posts, reads, runs, lines, clock, authorizeCalls: () => authorizeCalls }
 }
