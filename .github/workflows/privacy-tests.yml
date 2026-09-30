@@ -1,0 +1,28 @@
+name: Privacy tests
+
+on:
+  pull_request:
+    paths:
+      - ".claude/settings.json"
+      - "integrations/privacy/**"
+      - ".github/workflows/privacy-tests.yml"
+  push:
+    branches: [zai-claude-code]
+    paths:
+      - ".claude/settings.json"
+      - "integrations/privacy/**"
+      - ".github/workflows/privacy-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test privacy startup policy and terminal inheritance
+        run: python3 -B -m unittest discover -s integrations/privacy/tests -v

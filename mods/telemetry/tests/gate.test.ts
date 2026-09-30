@@ -34,7 +34,7 @@ describe('gate', () => {
       }).toEqual({
         isServedDuringCreate: false,
         later: [`timer: ${refusal}`, `tool: ${refusal}`],
-        rows: ['tengu_plugin_survey_answered'],
+        rows: [],
       })
     },
   )
@@ -77,7 +77,7 @@ describe('gate', () => {
         rows: Fixtures.rowsOf(session).map(Fixtures.eventNameOf),
       }).toEqual({
         own: `HooksError: meddling: $.telemetry.log: ${Hooks.REFUSED.deny}`,
-        rows: ['tengu_plugin_survey_answered'],
+        rows: [],
       })
     },
   )
@@ -102,8 +102,8 @@ describe('gate', () => {
         rows: Fixtures.rowsOf(session).map(Fixtures.eventNameOf),
       }).toEqual({
         answer: 'queued',
-        posts: 1,
-        rows: ['tengu_plugin_survey_answered'],
+        posts: 0,
+        rows: [],
       })
     },
   )
@@ -125,7 +125,7 @@ describe('gate', () => {
         rows: Fixtures.rowsOf(session).map(Fixtures.eventNameOf),
       }).toEqual({
         own: `HooksError: replacing: $.telemetry.log: ${Hooks.REFUSED.deny}`,
-        rows: ['tengu_plugin_survey_answered'],
+        rows: [],
       })
     },
   )
@@ -152,8 +152,8 @@ describe('gate', () => {
         rows: Fixtures.rowsOf(session),
       }).toEqual({
         answer: 'queued',
-        posts: 1,
-        rows: [Fixtures.EXPECTED_ROW],
+        posts: 0,
+        rows: [],
       })
     },
   )
@@ -180,8 +180,8 @@ describe('gate', () => {
         rows: Fixtures.rowsOf(session),
       }).toEqual({
         answer: 'queued',
-        posts: 1,
-        rows: [Fixtures.EXPECTED_ROW],
+        posts: 0,
+        rows: [],
       })
     },
   )

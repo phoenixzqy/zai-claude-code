@@ -23,6 +23,13 @@ Agents that do not automatically discover these paths should read `AGENTS.md` an
 
 This repository contains Claude Code documentation, plugins, mods, and examples, not the proprietary CLI engine source. Provider integrations must use supported configuration or a clearly documented external gateway; do not claim a plugin changes the engine's native authentication or model provider.
 
+## Privacy defaults
+
+- `.claude/settings.json` is the single source of truth for runtime privacy opt-outs; the privacy launcher reads it rather than maintaining another copy.
+- Keep plugin telemetry disabled for both first-party and collector destinations. Preserve entry validation and caller-tier permissions.
+- Do not re-enable analytics, OpenTelemetry exporters, remote error reports, feedback commands, or surveys in our runtime defaults.
+- Runtime opt-outs do not constitute an engine source patch or a network sandbox. Do not claim internal TUI log staging is verified without engine-level evidence.
+
 ## Security hardening for GitHub Actions
 
 Workflow jobs in this repository that call Claude run with three protections.

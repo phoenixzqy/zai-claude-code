@@ -45,6 +45,17 @@ For more installation options, uninstall steps, and troubleshooting, see the [se
 
 2. Navigate to your project directory and run `claude`.
 
+## Customization branch privacy
+
+Our customizations target `zai-claude-code`; `main` is reserved for upstream synchronization. This branch's [telemetry mod](./mods/telemetry) discards plugin analytics, and `.claude/settings.json` contains our shared runtime privacy opt-outs. For startup protection in any project, launch the separately installed Claude Code through:
+
+```sh
+python3 /path/to/zai-claude-code/integrations/privacy/claude.py
+python3 /path/to/zai-claude-code/integrations/privacy/claude.py -- -p 'Explain this project'
+```
+
+The launcher disables analytics, OpenTelemetry exports, remote error reporting, feedback commands and surveys, and the TUI feedback entry points. This repository cannot patch or verify the proprietary engine's internal TUI log staging. See [privacy coverage and limitations](./integrations/privacy/README.md) before relying on it for strict isolation.
+
 ## Plugins
 
 This repository includes several Claude Code plugins that extend functionality with custom commands and agents. See the [plugins directory](./plugins/README.md) for detailed documentation on available plugins.

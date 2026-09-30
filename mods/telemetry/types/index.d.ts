@@ -3,7 +3,7 @@
  * noun, its types exported here and the noun declared on `EngineInterface`.
  *
  * The telemetry mod hooks the noun's two events, `telemetry.log` and
- * `telemetry.mark`, and is what queues and sends a row; on an engine that
+ * `telemetry.mark`, and validates and discards each entry; on an engine that
  * has no `telemetry` of its own it also adds the noun in the `engine.create`
  * fold, checked against `EngineInterface['telemetry']`. Its hooks import
  * these types from this folder, a mod that calls the noun and a test that
@@ -12,7 +12,7 @@
  */
 
 /**
- * A plugin's analytics, queued through `$.telemetry` and sent in batches.
+ * A plugin's analytics contract, validated and discarded in this branch.
  *
  * The telemetry mod serves the plugins built into the CLI alone: a call from
  * an installed plugin rejects. Where the mod is off or absent nothing is
@@ -20,13 +20,13 @@
  */
 export type Telemetry = {
   /**
-   * Queues one event, `tengu_plugin_<event>`, as one first-party row, sent
-   * with the next batch; resolves once queued, rejects a malformed entry.
+   * Validates and discards one event; resolves without collecting or sending
+   * a row, rejects a malformed entry.
    *
    * The calling mod names itself in `event`; one already named `tengu_…` is
-   * sent as named. A value is a finite number, a boolean or a
+   * accepted as named. A value is a finite number, a boolean or a
    * TelemetryChoice; free text is refused. One input, as every op on `$`
-   * takes. Whether a batch went out is a line in the debug log.
+   * takes. Neither destination exports or writes a debug log.
    *
    * @param entry the event's name, a snake_case token, and its properties by
    *   snake_case key
@@ -42,13 +42,12 @@ export type Telemetry = {
   log: (entry: TelemetryLogEntry) => Promise<void>
 
   /**
-   * Marks one use of a feature as the CLI's own feature events do, one
-   * `tengu_feature_<kind>` row queued for the next batch; resolves once
-   * queued, rejects a malformed entry.
+   * Validates and discards one feature mark; resolves without collecting or
+   * sending a row, rejects a malformed entry.
    *
    * The row carries `feature_name`, `error_code` on sad or bad (`reason`,
    * required there and refused on ok) and the entry's `props`, checked as
-   * `log`'s are; it joins the product-wide feature surface, so no prefix.
+   * `log`'s are; no row is queued or exported in this branch.
    *
    * @param entry the feature, how it went, why when not ok, and the row's
    *   properties by snake_case key
@@ -64,9 +63,8 @@ export type Telemetry = {
 }
 
 /**
- * Where a logged record goes: `anthropic`, the first-party analytics this
- * mod sends, or `collector`, the telemetry collector a session's operator
- * configured, which this mod leaves to whatever is beneath it.
+ * The requested destination. Both `anthropic` and `collector` are discarded
+ * by this branch's telemetry mod rather than sent or forwarded.
  */
 export type TelemetryDestination = 'anthropic' | 'collector'
 
@@ -75,8 +73,7 @@ export type TelemetryDestination = 'anthropic' | 'collector'
  * properties by snake_case key.
  *
  * `to` names the destination and is never part of the row; left out, it
- * reads as `anthropic`. An entry for `collector` is not this mod's: its
- * hook passes it on beneath untouched.
+ * reads as `anthropic`. Both destinations are validated and discarded.
  */
 export type TelemetryLogEntry = {
   to?: TelemetryDestination
