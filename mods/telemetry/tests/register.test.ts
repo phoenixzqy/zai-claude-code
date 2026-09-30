@@ -258,8 +258,9 @@ describe('register', () => {
     await sender.telemetry.log({ event: 'x', to: 'collector' })
     await sender.telemetry.mark({ feature: 'x', kind: 'ok' })
     await sender.flush()
-    expect(() => Hooks.checkedFields({ event: 'free text' })).toThrow()
-    expect(() => Hooks.checkedMark({ feature: 'x', kind: 'bad' })).toThrow()
+    await expect(sender.telemetry.log({ event: 'free text' })).rejects.toThrow()
+    await expect(sender.telemetry.log({ event: 'free text', to: 'collector' })).rejects.toThrow()
+    await expect(sender.telemetry.mark({ feature: 'x', kind: 'bad' })).rejects.toThrow()
   })
 
   test('the gate still serves only core and built-in callers', () => {
@@ -269,6 +270,14 @@ describe('register', () => {
     ).toEqual(['served', 'served', Hooks.REFUSED, Hooks.REFUSED, Hooks.REFUSED])
     expect(() => Hooks.served({}, Fixtures.nextOf(undefined))).toThrow(
       '$.telemetry: the call names no origin',
+    )
+  })
+
+  test('a gate that threw refuses; a refusal from beneath passes up', () => {
+    expect(Hooks.caught({}, Fixtures.failingNext(false))).toEqual(Hooks.REFUSED)
+
+    expect(() => Hooks.caught({}, Fixtures.failingNext(true))).toThrow(
+      'beneath refused the entry',
     )
   })
 })

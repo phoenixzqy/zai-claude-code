@@ -1,10 +1,7 @@
 name: "Mod tests"
 
 on:
-  pull_request:
-    paths:
-      - "mods/**"
-      - ".github/workflows/mod-tests.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -25,16 +22,6 @@ jobs:
         run: tsc -p mods/tsconfig.json
 
       - name: Run each mod's tests
-        run: |
-          if ! claude plugin test --help 2>/dev/null | grep -q '^Usage: claude plugin test'; then
-            echo "claude $(claude --version) has no 'plugin test' yet; skipping the test step"
-            exit 0
-          fi
-          status=0
-          for mod in mods/*/; do
-            [ -d "$mod/tests" ] || continue
-            claude plugin test "$mod" || status=1
-          done
-          exit $status
+        run: python3 -B .github/scripts/check_mods.py
         env:
           CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: "1"

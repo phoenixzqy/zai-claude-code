@@ -8,6 +8,12 @@ Claude Code is an agentic coding tool that lives in your terminal, understands y
 
 **Learn more in the [official documentation](https://code.claude.com/docs/en/overview)**.
 
+## zai customizations
+
+In this fork, `main` is reserved for syncing upstream Claude Code. `zai-claude-code` is our integration branch for customizations; target customization PRs there unless explicitly asked otherwise. Coding-agent instructions and project skill discovery share one source through relative symbolic links; see [AGENTS.md](AGENTS.md).
+
+To use GitHub Copilot models with the installed Claude Code CLI, see the opt-in [GitHub Copilot gateway](integrations/github-copilot/README.md), including command-line and TUI device login. This is an external gateway, not native Claude Code authentication.
+
 <img src="./demo.gif" />
 
 ## Get started
@@ -55,6 +61,10 @@ python3 /path/to/zai-claude-code/integrations/privacy/claude.py -- -p 'Explain t
 ```
 
 The launcher disables analytics, OpenTelemetry exports, remote error reporting, feedback commands and surveys, and the TUI feedback entry points. This repository cannot patch or verify the proprietary engine's internal TUI log staging. See [privacy coverage and limitations](./integrations/privacy/README.md) before relying on it for strict isolation.
+
+## Local contributor validation
+
+`zai-claude-code` is our default customization branch; `main` mirrors upstream. Hosted Actions on customization branches are manual-only. Install the Git `pre-push` gate with `python .github/scripts/local_ci.py --install` after installing the prerequisites in [local validation](./docs/local-validation.md). Every non-deletion push validates a clean committed HEAD against the full suite. Use the shared [repo-sync skill](./.agents/skills/repo-sync/SKILL.md) for upstream updates, preserving our customizations during conflicts.
 
 ## Plugins
 

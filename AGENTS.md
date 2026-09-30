@@ -5,17 +5,33 @@ Guidance for Claude Code and other coding agents working in this repository.
 ## Branches and pull requests
 
 - `main` mirrors the upstream `anthropics/claude-code` repository. Reserve it for upstream synchronization; do not put our customizations there.
-- `zai-claude-code` is our main working and integration branch for customizations.
+- `zai-claude-code` is the repository default, main working, and integration branch for customizations.
 - Start task branches from the latest `origin/zai-claude-code`. Target every customization PR at `zai-claude-code`, not `main`, unless the user explicitly asks for a different base. Pass the base explicitly when creating a PR; do not rely on GitHub's default branch.
 - Add the `zai` label to customization PRs.
 - Use an isolated worktree before editing, switching branches, building, testing, or generating files. Never switch or modify the shared source checkout. Release the worktree after work and preserve requested deliverables.
 - Remove verified task-owned temporary files and stop only task-owned processes before handing off. Do not delete shared caches or other sessions' artifacts.
 
+## Local CI: Git pre-push gate
+
+**CI runs locally through the Git `pre-push` hook, not automatically in GitHub Actions.** Use the same strategy as `zai-cli`: install with `python .github/scripts/local_ci.py --install`, then run `python .github/scripts/local_ci.py` during development. See `docs/local-validation.md` for prerequisites and coverage.
+
+- Hosted workflows on customization branches are manual-only (`workflow_dispatch`). This includes issue, comment, schedule, push, and PR automation. Keep their security protections and validate them locally; do not restore automatic triggers during upstream syncs.
+- Every non-deletion push from a customization checkout runs the complete local suite against a clean committed HEAD. The pushed commit tips must match HEAD. Deletion-only pushes have no source tree to validate.
+- Do not bypass installed hooks, silently skip unavailable tests, install dependencies during a push, or turn an inherited failure into a pass. Report tool/API incompatibilities and fix them separately; local CI must fail on them too.
+- The sole user-approved compatibility quarantine is `mods/sec-default/tests/register.disabled.ts`: its 42 registration tests need `prompt.compose`, which Claude Code 2.1.284 rejects. Keep their source and the runtime security hook intact; continue running the other 15 sec-default tests and typechecking everything. Report disabled coverage, not a passing registration suite. Restore the `.test.ts` filename after validating a compatible engine; do not extend this exception without explicit user instruction.
+- Linked worktrees share repository-local Git configuration. Install only from a claimed worktree and preserve any different existing hooks configuration. The hook files belong to the customization branch; the upstream-only `main` tree remains unchanged.
+- During initial adoption, publish the hook implementation before installing it. Run and report validation, including inherited failures, before that bootstrap push. Subsequent pushes must use the installed gate.
+- Local hooks are contributor-side checks, not server enforcement. Browser edits and forge merges cannot supply their validation evidence. Record native platform gaps honestly.
+
+## Upstream synchronization
+
+Use the shared `repo-sync` skill when syncing `anthropics/claude-code` into this fork. Refresh the upstream-only `main` mirror first, then merge its captured commit into a task branch based on `zai-claude-code`. Preserve **our `zai-claude-code` customizations as the source of truth for conflicts**, while retaining nonconflicting upstream updates. Never blanket-replace files or force-push divergent history. Keep automatic Actions disabled, the local hook gate, shared guidance/skills, and provider/privacy customizations after every sync.
+
 ## Shared instructions and skills
 
 `AGENTS.md` is the canonical instruction file. `CLAUDE.md` and `.github/copilot-instructions.md` are relative symbolic links to it. Edit `AGENTS.md`, not separate copies.
 
-Project skills are exposed through `.agents/skills`. Each entry links to the original skill directory under `plugins/`, including its references and scripts. `.claude/skills`, `.codex/skills`, and `.github/skills` link to this shared directory. Edit the original plugin skill, not a duplicate. Preserve relative links and keep skill names lowercase and hyphenated to support cross-agent discovery.
+Project skills are exposed through `.agents/skills`. Plugin skills link to their original directories under `plugins/`, including references and scripts; repository-owned skills such as `repo-sync` live directly in `.agents/skills`. `.claude/skills`, `.codex/skills`, and `.github/skills` link to this shared directory. Edit the canonical skill, not a duplicate. Preserve relative links and keep skill names lowercase and hyphenated to support cross-agent discovery.
 
 Agents that do not automatically discover these paths should read `AGENTS.md` and applicable `.agents/skills/*/SKILL.md` files explicitly. Shared discovery does not make Claude-specific plugin APIs, commands, or tools available in another agent: use a skill only when its subject applies, and adapt tool calls to the current agent's capabilities.
 
@@ -51,11 +67,11 @@ Keep them when you add or edit a workflow.
    or a newer model: on an older one Claude Code falls back to its default
    permission mode.
 
-`claude.yml` answers `@claude` mentions. The Claude Code action sets
+The retained upstream `claude.yml` handler is manual-only in this branch; it no longer automatically answers `@claude` mentions. The Claude Code action sets
 `--permission-mode acceptEdits` for those, and the `--permission-mode auto` in
 the workflow's `claude_args`, which comes after it, replaces it.
 
-`.github/workflows/workflow-hardening.yml` fails when a job that runs the Claude
+The local gate and manual `.github/workflows/workflow-hardening.yml` check fail when a job that runs the Claude
 Code action or mentions `ANTHROPIC_FEDERATION_RULE_ID` breaks protection 1 or 3,
 or when the allow list is missing, empty, not `mode: enforce`, or names a host
 with `*`. It cannot see a job that calls Claude another way, so check new

@@ -1,8 +1,7 @@
 name: "Issue Lifecycle Comment"
 
 on:
-  issues:
-    types: [labeled]
+  workflow_dispatch:
 
 permissions:
   issues: write

@@ -1,8 +1,7 @@
 name: Issue Opened Dispatch
 
 on:
-  issues:
-    types: [opened]
+  workflow_dispatch:
 
 permissions:
   issues: read

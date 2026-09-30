@@ -1,17 +1,7 @@
 name: Privacy tests
 
 on:
-  pull_request:
-    paths:
-      - ".claude/settings.json"
-      - "integrations/privacy/**"
-      - ".github/workflows/privacy-tests.yml"
-  push:
-    branches: [zai-claude-code]
-    paths:
-      - ".claude/settings.json"
-      - "integrations/privacy/**"
-      - ".github/workflows/privacy-tests.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
