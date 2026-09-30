@@ -63,7 +63,7 @@ The retained upstream `claude.yml` handler is manual-only in this branch; it no 
 `--permission-mode acceptEdits` for those, and the `--permission-mode auto` in
 the workflow's `claude_args`, which comes after it, replaces it.
 
-`.github/workflows/workflow-hardening.yml` fails when a job that runs the Claude
+The local gate and manual `.github/workflows/workflow-hardening.yml` check fail when a job that runs the Claude
 Code action or mentions `ANTHROPIC_FEDERATION_RULE_ID` breaks protection 1 or 3,
 or when the allow list is missing, empty, not `mode: enforce`, or names a host
 with `*`. It cannot see a job that calls Claude another way, so check new

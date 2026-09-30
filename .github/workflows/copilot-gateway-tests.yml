@@ -1,10 +1,7 @@
 name: Copilot gateway tests
 
 on:
-  pull_request:
-    paths:
-      - "integrations/github-copilot/**"
-      - ".github/workflows/copilot-gateway-tests.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read

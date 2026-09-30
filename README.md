@@ -51,6 +51,10 @@ For more installation options, uninstall steps, and troubleshooting, see the [se
 
 2. Navigate to your project directory and run `claude`.
 
+## Local contributor validation
+
+`zai-claude-code` is our default customization branch; `main` mirrors upstream. Hosted Actions on customization branches are manual-only. Install the Git `pre-push` gate with `python .github/scripts/local_ci.py --install` after installing the prerequisites in [local validation](./docs/local-validation.md). Every non-deletion push validates a clean committed HEAD against the full suite. Use the shared [repo-sync skill](./.agents/skills/repo-sync/SKILL.md) for upstream updates, preserving our customizations during conflicts.
+
 ## Plugins
 
 This repository includes several Claude Code plugins that extend functionality with custom commands and agents. See the [plugins directory](./plugins/README.md) for detailed documentation on available plugins.

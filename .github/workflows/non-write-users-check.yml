@@ -1,8 +1,6 @@
 name: Non-write Users Check
 on:
-  pull_request:
-    paths:
-      - ".github/**"
+  workflow_dispatch:
 
 permissions:
   contents: read

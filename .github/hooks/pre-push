@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+if [ -x "$root/.venv-local-ci/bin/python" ]; then
+    exec "$root/.venv-local-ci/bin/python" "$root/.github/scripts/local_ci.py" --pre-push
+elif [ -f "$root/.venv-local-ci/Scripts/python.exe" ]; then
+    exec "$root/.venv-local-ci/Scripts/python.exe" "$root/.github/scripts/local_ci.py" --pre-push
+elif command -v python3 >/dev/null 2>&1; then
+    exec python3 "$root/.github/scripts/local_ci.py" --pre-push
+elif command -v python >/dev/null 2>&1; then
+    exec python "$root/.github/scripts/local_ci.py" --pre-push
+else
+    echo "Python 3 is required for pre-push validation." >&2
+    exit 1
+fi

@@ -1,0 +1,13 @@
+{
+  "steps": [
+    {"name": "Local gate regression tests", "argv": ["{python}", "-B", "-m", "unittest", "discover", "-s", ".github/scripts", "-p", "test_*.py"]},
+    {"name": "Manual-only workflows and shared guidance", "argv": ["{python}", "-B", ".github/scripts/check_local_ci.py"]},
+    {"name": "Workflow security hardening", "argv": ["{python}", "-B", ".github/scripts/check_workflow_hardening.py"]},
+    {"name": "Integration unit suites", "argv": ["{python}", "-B", ".github/scripts/check_integrations.py"]},
+    {"name": "Authenticated Copilot gateway smoke test", "argv": ["{python}", "-B", "integrations/github-copilot/tests/proxy_smoke.py"]},
+    {"name": "Native and translated Copilot protocol smoke test", "argv": ["{python}", "-B", "integrations/github-copilot/tests/protocol_smoke.py"]},
+    {"name": "Typecheck every mod", "argv": ["tsc", "-p", "mods/tsconfig.json"]},
+    {"name": "Every mod suite", "argv": ["{python}", "-B", ".github/scripts/check_mods.py"], "env": {"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"}},
+    {"name": "Whitespace errors", "argv": ["git", "diff", "--check", "HEAD"]}
+  ]
+}
