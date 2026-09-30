@@ -4,12 +4,12 @@ A personal fork for learning and personal use, with a GitHub Copilot gateway for
 
 ## Install (Linux/macOS/Windows)
 
-Requires Python 3.10+ (with pip/venv) and Git. Installs the gateway and the official CLI if missing, and permanently adds the launcher to your Bash/Zsh PATH or Windows user PATH. Run in Bash, Zsh, PowerShell, or Command Prompt:
+Requires Python 3.10+ (with pip/venv) and Git. From a checkout of the `zai-claude-code` branch, run:
 
 ```sh
-python -c "import pathlib, subprocess, sys, tempfile; temporary = tempfile.TemporaryDirectory(prefix='zai-claude-source-'); source = pathlib.Path(temporary.name) / 'source'; clone = ['git', 'clone', '--depth', '1', '--branch', 'zai-claude-code', 'https://github.com/phoenixzqy/zai-claude-code.git', str(source)]; install = [sys.executable, str(source / 'integrations/installer/install.py')]; exec('try:\n subprocess.run(clone, check=True)\n subprocess.run(install, check=True)\nfinally:\n temporary.cleanup()')"
+python3 scripts/build_and_install_zai_claude_code.py
 ```
 
-If Python 3 is named `python3` or `py -3` on your system, replace only the initial `python`. Open a new terminal, then run `zai-claude-code login --tui` (or `login` for command-line login). Copilot usage requires an entitled account.
+Installs the gateway and the official CLI if missing, and permanently adds the launcher to your Bash/Zsh PATH or Windows user PATH. On Windows, use `python` or `py -3` instead of `python3`. Open a new terminal, then run `zai-claude-code login --tui` (or `login` for command-line login). Copilot usage requires an entitled account.
 
-See [installer details](integrations/installer/README.md) for prerequisites and downloaded-code trust considerations, and the [backup README](README.backup.md) for the full documentation.
+See [installer details](integrations/installer/README.md) for installation without a checkout, prerequisites, and downloaded-code trust considerations, and the [backup README](README.backup.md) for the full documentation.

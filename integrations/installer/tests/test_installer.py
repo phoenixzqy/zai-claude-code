@@ -1,6 +1,7 @@
 import importlib.util
 import os
 from pathlib import Path
+import runpy
 import shlex
 import subprocess
 import sys
@@ -299,9 +300,11 @@ class CrossPlatformInstallerTests(unittest.TestCase):
 
     def test_readme_one_liner_uses_same_interpreter_and_cleans_on_failure(self):
         readme = Path(__file__).resolve().parents[3] / 'README.md'
-        command = next(line for line in readme.read_text().splitlines() if line.startswith('python -c '))
         detailed = Path(__file__).resolve().parents[1] / 'README.md'
-        self.assertIn(command, detailed.read_text())
+        local_command = 'python3 scripts/build_and_install_zai_claude_code.py'
+        self.assertIn(local_command, readme.read_text())
+        self.assertIn(local_command, detailed.read_text())
+        command = next(line for line in detailed.read_text().splitlines() if line.startswith('python -c '))
         arguments = shlex.split(command)
         for fail_at in (None, 0, 1):
             calls = []
@@ -313,6 +316,8 @@ class CrossPlatformInstallerTests(unittest.TestCase):
                     self.assertTrue(directories[-1].exists())
                 else:
                     self.assertEqual(command[0], sys.executable)
+                    self.assertEqual(Path(command[1]), directories[0] / 'source' / 'scripts' /
+                                     'build_and_install_zai_claude_code.py')
                 if len(calls) - 1 == fail_at:
                     raise subprocess.CalledProcessError(1, command)
             with patch.object(subprocess, 'run', side_effect=run):
@@ -323,6 +328,25 @@ class CrossPlatformInstallerTests(unittest.TestCase):
                     with self.assertRaises(subprocess.CalledProcessError):
                         exec(arguments[2], {})
             self.assertFalse(directories[0].exists())
+
+    def test_repo_script_delegates_and_preserves_exit_status(self):
+        root = Path(__file__).resolve().parents[3]
+        script = root / 'scripts/build_and_install_zai_claude_code.py'
+        execute = runpy.run_path
+        for status in (0, 1):
+            with patch.object(runpy, 'run_path', side_effect=SystemExit(status)) as delegate:
+                with self.assertRaises(SystemExit) as result:
+                    execute(str(script), run_name='__main__')
+                self.assertEqual(result.exception.code, status)
+                delegate.assert_called_once_with(str(root / 'integrations/installer/install.py'),
+                                                 run_name='__main__')
+
+    def test_repo_script_help_works_from_another_directory(self):
+        script = Path(__file__).resolve().parents[3] / 'scripts/build_and_install_zai_claude_code.py'
+        with tempfile.TemporaryDirectory() as temporary:
+            result = subprocess.run([sys.executable, '-B', str(script), '--help'], cwd=temporary,
+                                    check=True, capture_output=True, text=True)
+        self.assertIn('Install the Copilot gateway and official CLI', result.stdout)
 
     @unittest.skipUnless(os.name == 'nt', 'Native Windows executable validation requires Windows')
     def test_native_windows_launcher_preserves_arguments(self):

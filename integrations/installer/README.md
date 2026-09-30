@@ -1,20 +1,22 @@
 # Source installer (Linux/macOS/Windows)
 
-Install our Copilot gateway from `zai-claude-code`, install the official Claude Code CLI if missing, and permanently add `~/.local/bin` to your Bash/Zsh or Windows user PATH. The same command works in Bash, Zsh, PowerShell, and Command Prompt:
+Install our Copilot gateway from `zai-claude-code`, install the official Claude Code CLI if missing, and permanently add `~/.local/bin` to your Bash/Zsh or Windows user PATH. From the repository root:
 
 ```sh
-python -c "import pathlib, subprocess, sys, tempfile; temporary = tempfile.TemporaryDirectory(prefix='zai-claude-source-'); source = pathlib.Path(temporary.name) / 'source'; clone = ['git', 'clone', '--depth', '1', '--branch', 'zai-claude-code', 'https://github.com/phoenixzqy/zai-claude-code.git', str(source)]; install = [sys.executable, str(source / 'integrations/installer/install.py')]; exec('try:\n subprocess.run(clone, check=True)\n subprocess.run(install, check=True)\nfinally:\n temporary.cleanup()')"
+python3 scripts/build_and_install_zai_claude_code.py
+```
+
+On Windows, use `python` or `py -3` instead of `python3`. The script delegates to the existing cross-platform installer, keeping one source of truth; it does not build the proprietary CLI engine.
+
+Without a checkout, this command clones the customization branch temporarily and runs the same script in Bash, Zsh, PowerShell, or Command Prompt:
+
+```sh
+python -c "import pathlib, subprocess, sys, tempfile; temporary = tempfile.TemporaryDirectory(prefix='zai-claude-source-'); source = pathlib.Path(temporary.name) / 'source'; clone = ['git', 'clone', '--depth', '1', '--branch', 'zai-claude-code', 'https://github.com/phoenixzqy/zai-claude-code.git', str(source)]; install = [sys.executable, str(source / 'scripts/build_and_install_zai_claude_code.py')]; exec('try:\n subprocess.run(clone, check=True)\n subprocess.run(install, check=True)\nfinally:\n temporary.cleanup()')"
 ```
 
 Requires Python 3.10+ with `venv`/pip, Git, and network access. Replace only the initial `python` with `python3` or `py -3` if needed; the child installer uses the same interpreter. Linux/macOS require Bash and a Bash or Zsh login shell (`SHELL`). Native Windows requires Windows PowerShell and Git for Windows (including Git Bash for the official CLI); WSL uses the Linux path. Other operating systems/shells are not supported by automatic setup.
 
 This downloads and executes code from this repository's current customization branch, pinned PyPI gateway dependencies, and (only if needed) `https://claude.ai/install.sh` or `https://claude.ai/install.ps1`, which redirect to `downloads.claude.ai`. Review those sources before running. Windows uses a process-only PowerShell execution-policy bypass for the official installer, not a persistent policy change. Run as your normal user, not with `sudo` or as Administrator. This is **not** a build of the proprietary Claude Code engine. The [privacy launcher](../privacy/README.md) is separate and is not activated by this installer; this installer does not promise analytics or TUI log-staging suppression.
-
-From an existing customization checkout, the equivalent is:
-
-```sh
-python integrations/installer/install.py
-```
 
 Open a new terminal after installation. On Linux/macOS, alternatively run `export PATH="$HOME/.local/bin:$PATH"` in the current one. On Windows, restart your terminal application; sign out/in if it retains a stale PATH. A child Python process cannot change its parent shell's PATH.
 
