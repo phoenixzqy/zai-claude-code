@@ -12,8 +12,8 @@ description: Commit, push, and open a PR
 ## Your task
 
 Based on the above changes:
-1. Create a new branch if on main
+1. Create a task branch from the latest `origin/zai-claude-code` in an isolated worktree if not already on a task branch. Do not edit or switch the shared source checkout; reserve `main` for upstream synchronization.
 2. Create a single commit with an appropriate message
 3. Push the branch to origin
-4. Create a pull request using `gh pr create`
+4. Create a pull request using `gh pr create --base zai-claude-code --label zai`, unless the user explicitly requests a different base
 5. You have the capability to call multiple tools in a single response. You MUST do all of the above in a single message. Do not use any other tools or do anything else. Do not send any other text or messages besides these tool calls.
