@@ -8,6 +8,12 @@ Claude Code is an agentic coding tool that lives in your terminal, understands y
 
 **Learn more in the [official documentation](https://code.claude.com/docs/en/overview)**.
 
+## zai customizations
+
+In this fork, `main` is reserved for syncing upstream Claude Code. `zai-claude-code` is our integration branch for customizations; target customization PRs there unless explicitly asked otherwise. Coding-agent instructions and project skill discovery share one source through relative symbolic links; see [AGENTS.md](AGENTS.md).
+
+To use GitHub Copilot models with the installed Claude Code CLI, see the opt-in [GitHub Copilot gateway](integrations/github-copilot/README.md), including command-line and TUI device login. This is an external gateway, not native Claude Code authentication.
+
 <img src="./demo.gif" />
 
 ## Get started
