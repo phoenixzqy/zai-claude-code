@@ -222,8 +222,8 @@ def proxy_environment(state, key):
     return environment
 
 
-def claude_environment(base, key, model):
-    environment = {name: value for name, value in os.environ.items()
+def claude_environment(base, key, model, environment=None):
+    environment = {name: value for name, value in (os.environ if environment is None else environment).items()
                    if not name.startswith(("ANTHROPIC_", "CLAUDE_CODE_USE_", "CLAUDE_CODE_OAUTH_TOKEN"))}
     environment.update({
         "ANTHROPIC_BASE_URL": base,
@@ -263,10 +263,28 @@ def stop_process(process):
             process.wait()
 
 
-def run(state, model, arguments):
+def native_claude(binary=None):
+    candidate = str(binary) if binary is not None else shutil.which("claude")
+    if not candidate:
+        raise CopilotError("Install Claude Code first.")
+
+    def is_launcher(path):
+        with Path(path).open("rb") as source:
+            source.seek(max(0, Path(path).stat().st_size - 65536))
+            return b"ZAI_CLAUDE_CODE_LAUNCHER=1" in source.read()
+
+    if binary is None and is_launcher(candidate):
+        runtime = Path.home() / ".local" / "share" / "zai-claude-code" / "runtime.json"
+        candidate = json.loads(runtime.read_text())["claude_binary"]
+    if not Path(candidate).is_absolute() or not Path(candidate).is_file() or is_launcher(candidate):
+        raise CopilotError("Native Claude executable is missing or recursive; rerun the install script.")
+    return candidate
+
+
+def run(state, model, arguments, claude_binary=None, environment=None):
     executable = Path(sys.executable).with_name("litellm.exe" if os.name == "nt" else "litellm")
-    claude = shutil.which("claude")
-    if not executable.is_file() or not claude:
+    claude = native_claude(claude_binary)
+    if not executable.is_file():
         raise CopilotError("Install requirements.txt in this Python environment and install Claude Code first.")
     available = models(state)
     selected = next((entry for entry in available if entry.get("id") == model), None)
@@ -289,7 +307,7 @@ def run(state, model, arguments):
         try:
             wait_ready(gateway, base, key)
             print(f"Using GitHub Copilot model {model} through a loopback-only gateway.", flush=True)
-            child = subprocess.Popen([claude, *arguments], env=claude_environment(base, key, model))
+            child = subprocess.Popen([claude, *arguments], env=claude_environment(base, key, model, environment))
             try:
                 return child.wait()
             finally:
@@ -298,7 +316,7 @@ def run(state, model, arguments):
             stop_process(gateway)
 
 
-def main(argv=None):
+def main(argv=None, claude_binary=None, environment=None):
     parser = argparse.ArgumentParser(description="GitHub Copilot device login and Claude Code gateway")
     parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -324,7 +342,7 @@ def main(argv=None):
             arguments = args.claude_args
             if arguments[:1] == ["--"]:
                 arguments = arguments[1:]
-            return run(args.state_dir, args.model, arguments)
+            return run(args.state_dir, args.model, arguments, claude_binary=claude_binary, environment=environment)
         return 0
     except KeyboardInterrupt:
         print("\nCancelled.", file=sys.stderr)

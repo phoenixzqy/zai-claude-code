@@ -260,7 +260,7 @@ def install(home, environment, source):
         legacy.unlink()
     print(f'Installed {launcher}\nPermanent PATH configured in: {location}')
     print('Open a new terminal, then run: claude')
-    print('Select GitHub Copilot account in the claude startup TUI, or run: claude copilot login --tui')
+    print('Copilot: claude copilot login, then claude copilot models and claude --model github-copilot/MODEL_ID')
     if not windows:
         print(f'In this terminal: export PATH={shlex.quote(str(bin_directory))}:"$PATH"')
 

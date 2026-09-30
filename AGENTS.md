@@ -39,6 +39,8 @@ Agents that do not automatically discover these paths should read `AGENTS.md` an
 
 This repository contains Claude Code documentation, plugins, mods, and examples, not the proprietary CLI engine source. Provider integrations must use supported configuration or a clearly documented external gateway; do not claim a plugin changes the engine's native authentication or model provider.
 
+For GitHub Copilot login, GitHub-hosted model selection, and use from zai-cli, read [docs/github-copilot.md](docs/github-copilot.md). Use its explicit gateway commands; the native Claude login menu and zai-cli's Claude Code app do not automatically select Copilot.
+
 ## Privacy defaults
 
 - `.claude/settings.json` is the single source of truth for runtime privacy opt-outs; the privacy launcher reads it rather than maintaining another copy.

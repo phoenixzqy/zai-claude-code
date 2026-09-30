@@ -187,6 +187,40 @@ class CredentialTests(unittest.TestCase):
 
 
 class GatewayTests(unittest.TestCase):
+    def test_native_binary_bypasses_wrapper_on_path(self):
+        with tempfile.TemporaryDirectory(prefix="copilot-native-test-") as directory:
+            native = Path(directory) / "native"
+            native.write_text("native fixture")
+            with patch.object(copilot.shutil, "which") as which:
+                self.assertEqual(copilot.native_claude(native), str(native))
+                which.assert_not_called()
+
+    def test_standalone_run_resolves_installed_wrapper_to_native(self):
+        with tempfile.TemporaryDirectory(prefix="copilot-native-test-") as directory:
+            home = Path(directory)
+            native = home / "native"
+            native.write_text("native fixture")
+            wrapper = home / "claude"
+            wrapper.write_text("#!/bin/sh\nZAI_CLAUDE_CODE_LAUNCHER=1\n")
+            runtime = home / ".local/share/zai-claude-code/runtime.json"
+            runtime.parent.mkdir(parents=True)
+            runtime.write_text(json.dumps({"claude_binary": str(native)}))
+            with patch.object(copilot.shutil, "which", return_value=str(wrapper)), \
+                    patch.object(copilot.Path, "home", return_value=home):
+                self.assertEqual(copilot.native_claude(), str(native))
+                runtime.write_text(json.dumps({"claude_binary": str(wrapper)}))
+                with self.assertRaisesRegex(copilot.CopilotError, "recursive"):
+                    copilot.native_claude()
+            with self.assertRaisesRegex(copilot.CopilotError, "recursive"):
+                copilot.native_claude(wrapper)
+
+    def test_copilot_run_command_passes_explicit_native_binary(self):
+        with patch.object(copilot, "run", return_value=7) as run:
+            self.assertEqual(copilot.main(["run", "--model", "model", "--", "--resume"],
+                                          claude_binary="/native/claude"), 7)
+        run.assert_called_once_with(copilot.DEFAULT_STATE, "model", ["--resume"],
+                                    claude_binary="/native/claude", environment=None)
+
     def test_endpoint_allowlist(self):
         for endpoint in ["https://api.githubcopilot.com", "https://api.business.githubcopilot.com/"]:
             self.assertEqual(copilot.validate_api_base(endpoint), endpoint.rstrip("/"))
@@ -252,7 +286,7 @@ class GatewayTests(unittest.TestCase):
 
     def test_run_cleanup_after_startup_failure(self):
         process = Mock()
-        with patch.object(Path, "is_file", return_value=True), patch.object(copilot.shutil, "which", return_value="claude"), \
+        with patch.object(Path, "is_file", return_value=True), patch.object(copilot, "native_claude", return_value="/native/claude"), \
                 patch.object(copilot, "models", return_value=[{"id": "model", "capabilities": {"supports": {"tool_calls": True}}}]), \
                 patch.object(copilot.subprocess, "Popen", return_value=process) as popen, \
                 patch.object(copilot, "wait_ready", side_effect=copilot.CopilotError("startup")), \
@@ -265,7 +299,7 @@ class GatewayTests(unittest.TestCase):
         self.assertFalse(Path(command[command.index("--config") + 1]).exists())
 
     def test_run_rejects_non_tool_model_before_starting_proxy(self):
-        with patch.object(Path, "is_file", return_value=True), patch.object(copilot.shutil, "which", return_value="claude"), \
+        with patch.object(Path, "is_file", return_value=True), patch.object(copilot, "native_claude", return_value="/native/claude"), \
                 patch.object(copilot, "models", return_value=[{"id": "model"}]), \
                 patch.object(copilot.subprocess, "Popen") as popen:
             with self.assertRaisesRegex(copilot.CopilotError, "tool calling"):
@@ -276,13 +310,13 @@ class GatewayTests(unittest.TestCase):
         gateway = Mock()
         child = Mock()
         child.wait.return_value = 3
-        with patch.object(Path, "is_file", return_value=True), patch.object(copilot.shutil, "which", return_value="claude"), \
+        with patch.object(Path, "is_file", return_value=True), patch.object(copilot, "native_claude", return_value="/native/claude"), \
                 patch.object(copilot, "models", return_value=[{"id": "model", "capabilities": {"supports": {"tool_calls": True}}}]), \
                 patch.object(copilot.subprocess, "Popen", side_effect=[gateway, child]) as popen, \
                 patch.object(copilot, "wait_ready"), patch.object(copilot, "stop_process") as stop, \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(copilot.run(Path("/tmp/example"), "model", ["-p", "hello"]), 3)
-        self.assertEqual(popen.call_args.args[0], ["claude", "-p", "hello"])
+        self.assertEqual(popen.call_args.args[0], ["/native/claude", "-p", "hello"])
         self.assertEqual([entry.args[0] for entry in stop.call_args_list], [child, gateway])
         self.assertEqual(popen.call_args.kwargs["env"]["ANTHROPIC_MODEL"], "model")
         gateway_call = popen.call_args_list[0]
