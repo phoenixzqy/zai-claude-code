@@ -14,6 +14,16 @@ In this fork, `main` is reserved for syncing upstream Claude Code. `zai-claude-c
 
 To use GitHub Copilot models with the installed Claude Code CLI, see the opt-in [GitHub Copilot gateway](integrations/github-copilot/README.md), including command-line and TUI device login. This is an external gateway, not native Claude Code authentication.
 
+### One-line source install (Linux/macOS)
+
+Installs our gateway and the official CLI if missing, with permanent Bash/Zsh PATH setup (not a source build of the proprietary engine):
+
+```sh
+python3 -c 'import pathlib, subprocess, tempfile; temporary = tempfile.TemporaryDirectory(prefix="zai-claude-source-"); source = pathlib.Path(temporary.name) / "source"; subprocess.run(["git", "clone", "--depth", "1", "--branch", "zai-claude-code", "https://github.com/phoenixzqy/zai-claude-code.git", str(source)], check=True); subprocess.run(["python3", str(source / "integrations/installer/install.py")], check=True); temporary.cleanup()'
+```
+
+Open a new terminal and run `zai-claude-code login --tui` (or `login` for command-line login), then `zai-claude-code models` and `zai-claude-code run --model MODEL_ID`. Requires Python 3.10+, Git, and a Copilot subscription. See [installer details](integrations/installer/README.md) for trust boundaries, prerequisites, installed files, and uninstall steps.
+
 <img src="./demo.gif" />
 
 ## Get started
