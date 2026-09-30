@@ -90,7 +90,30 @@ def choose(title, choices):
 
 
 def interactive_provider(arguments):
-    return (not arguments or arguments == ['auth', 'login']) and sys.stdin.isatty() and sys.stdout.isatty()
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return False
+    if arguments == ['auth', 'login']:
+        return True
+    # Hosts attach session identity and resources even to a fresh interactive launch.
+    values = {'--session-id', '--settings', '--add-dir', '--append-system-prompt-file'}
+    switches = {'--dangerously-skip-permissions'}
+    position = 0
+    while position < len(arguments):
+        option, separator, value = arguments[position].partition('=')
+        if option in switches and not separator:
+            position += 1
+        elif option in values:
+            if separator:
+                if not value:
+                    return False
+                position += 1
+            else:
+                if position + 1 >= len(arguments) or arguments[position + 1].startswith('-'):
+                    return False
+                position += 2
+        else:
+            return False
+    return True
 
 
 def copilot_startup_model(arguments):

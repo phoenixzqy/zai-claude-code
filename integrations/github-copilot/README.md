@@ -4,7 +4,7 @@ An opt-in local gateway that logs in to GitHub Copilot and lets the installed Cl
 
 This is not a modification to Claude Code's native `/login` or model picker. The CLI engine source is not in this repository. Both login modes below belong to this integration, and the gateway is active only for the Claude Code process it launches. No global Claude settings or existing login credentials are changed.
 
-With the [customized `claude` installer](../installer/README.md), bare `claude` in an interactive terminal offers **GitHub Copilot account** in its launcher-owned startup TUI. Select it to log in with a device code and choose an available tool-calling model without a separate command. `claude auth login` opens the same picker for fresh authentication. Native flags and non-interactive commands bypass this picker; explicit Copilot commands below remain supported.
+With the [customized `claude` installer](../installer/README.md), bare `claude` in an interactive terminal offers **GitHub Copilot account** in its launcher-owned startup TUI. Select it to log in with a device code and choose an available tool-calling model without a separate command. `claude auth login` opens the same picker for fresh authentication. Fresh hosted interactive sessions also show the picker with session/resource settings and `--dangerously-skip-permissions`. Other flags and non-interactive commands bypass this picker; explicit Copilot commands below remain supported.
 
 ## Requirements
 

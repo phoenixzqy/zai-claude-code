@@ -147,6 +147,55 @@ class ClaudeLauncherTests(unittest.TestCase):
                     login.assert_not_called()
                     gateway.assert_called_once()
 
+    def test_hosted_interactive_start_offers_copilot_and_preserves_resources(self):
+        resources = self.directory / 'resources'
+        custom = {'hooks': {'SessionStart': []}, 'env': {'HOST_SETTING': 'keep'}}
+        settings = self.directory / 'host-settings.json'
+        settings.write_text(json.dumps(custom))
+        arguments = ['--add-dir', str(resources), '--append-system-prompt-file',
+                     str(resources / 'instructions.md'), '--settings', str(settings),
+                     '--dangerously-skip-permissions', '--session-id',
+                     '10da8a78-55bd-41c4-aa22-50d410412fca']
+
+        def run(state, model, command):
+            self.assertEqual(model, 'model-id')
+            snapshot = Path(command[command.index('--settings') + 1])
+            merged = json.loads(snapshot.read_text())
+            self.assertEqual(merged['hooks'], custom['hooks'])
+            self.assertEqual(merged['env']['HOST_SETTING'], 'keep')
+            self.assertEqual(merged['env']['DISABLE_TELEMETRY'], '1')
+            self.assertEqual(command[2:], arguments[:4] + arguments[6:])
+            return 7
+
+        with patch.object(launcher.sys.stdin, 'isatty', return_value=True), \
+                patch.object(launcher.sys.stdout, 'isatty', return_value=True), \
+                patch.object(launcher, 'choose', side_effect=[1, 0]) as choose, \
+                patch.object(copilot, 'DEFAULT_STATE', self.directory / 'state'), \
+                patch.object(copilot, 'login'), \
+                patch.object(copilot, 'models', return_value=[
+                    {'id': 'model-id', 'capabilities': {'supports': {'tool_calls': True}}},
+                ]), patch.object(copilot, 'run', side_effect=run), \
+                patch.object(launcher.os, 'execve') as execute:
+            self.assertEqual(launcher.main(arguments), 7)
+            self.assertIn('GitHub Copilot account', choose.call_args_list[0].args[1])
+            execute.assert_not_called()
+
+    def test_host_options_do_not_hide_noninteractive_modes_or_invalid_arguments(self):
+        with patch.object(launcher.sys.stdin, 'isatty', return_value=True), \
+                patch.object(launcher.sys.stdout, 'isatty', return_value=True):
+            for arguments in (['--session-id=fixture', '--settings={}'],
+                              ['--add-dir', 'resource', '--add-dir', 'other'],
+                              ['--settings', '{}', '--dangerously-skip-permissions']):
+                with self.subTest(arguments=arguments):
+                    self.assertTrue(launcher.interactive_provider(arguments))
+            for extra in (['--print'], ['-p', 'prompt'], ['--resume', 'fixture'],
+                          ['--continue'], ['--model=sonnet'], ['--model', 'sonnet'],
+                          ['auth', 'status'], ['--help'], ['prompt'], ['--', 'prompt'],
+                          ['--session-id'], ['--settings='], ['--settings', '--print'],
+                          ['--unknown'], ['--dangerously-skip-permissions=true']):
+                with self.subTest(extra=extra):
+                    self.assertFalse(launcher.interactive_provider(['--session-id', 'fixture', *extra]))
+
     def test_native_selection_preserves_startup_and_auth_login(self):
         for arguments in ([], ['auth', 'login']):
             with self.subTest(arguments=arguments), \
@@ -236,15 +285,19 @@ class ClaudeLauncherTests(unittest.TestCase):
             f'copilot.DEFAULT_STATE = launcher.Path({str(self.directory / "state")!r})\n'
             'copilot.models = lambda state: [{"id": "fixture-model", '
             '"capabilities": {"supports": {"tool_calls": True}}}]\n'
-            'sys.exit(launcher.main([]))\n'
+            'sys.exit(launcher.main(sys.argv[1:]))\n'
         )
-        for cancel in (False, True):
-            with self.subTest(cancel=cancel):
+        for arguments, cancel in (([], False), ([], True),
+                                  (['--add-dir', str(self.directory),
+                                    '--append-system-prompt-file', str(self.directory / 'instructions.md'),
+                                    '--settings', '{}', '--dangerously-skip-permissions',
+                                    '--session-id', '10da8a78-55bd-41c4-aa22-50d410412fca'], False)):
+            with self.subTest(arguments=arguments, cancel=cancel):
                 master, slave = pty.openpty()
                 original = termios.tcgetattr(slave)
                 fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 100, 0, 0))
                 process = subprocess.Popen(
-                    [sys.executable, '-B', str(script)], stdin=slave, stdout=slave, stderr=slave,
+                    [sys.executable, '-B', str(script), *arguments], stdin=slave, stdout=slave, stderr=slave,
                     env={**os.environ, 'TERM': 'xterm-256color', 'NO_COLOR': '1'},
                 )
                 output = b''
