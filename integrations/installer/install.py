@@ -144,6 +144,38 @@ def windows_launcher(python, gateway, claude):
         return (Path(temporary) / 'zai-claude-code.exe').read_bytes()
 
 
+def ensure_environment(directory, windows):
+    bin_directory = directory / ('Scripts' if windows else 'bin')
+    python = bin_directory / ('python.exe' if windows else 'python')
+    if directory.is_symlink() or bin_directory.is_symlink():
+        raise ValueError('Refusing to modify a symbolic-linked environment directory.')
+    if python.exists():
+        health = subprocess.run([str(python), '-I', '-c', 'import pip'],
+                                capture_output=True, text=True, check=False, timeout=30)
+        if health.returncode == 0:
+            return python
+        print('Repairing the incomplete Python environment.', flush=True)
+    if not windows:
+        names = {'python', 'python3', f'python3.{sys.version_info.minor}',
+                 Path(sys._base_executable).name}
+        executables = [bin_directory / name for name in names
+                       if (bin_directory / name).exists() or (bin_directory / name).is_symlink()]
+        configuration = directory / 'pyvenv.cfg'
+        if executables and (not configuration.is_file() or configuration.is_symlink()):
+            raise ValueError('Refusing to repair a directory without a regular pyvenv.cfg.')
+        for executable in executables:
+            executable.unlink()
+    try:
+        venv.EnvBuilder(with_pip=True, symlinks=not windows).create(directory)
+    except subprocess.CalledProcessError as error:
+        output = error.output or b''
+        if isinstance(output, bytes):
+            output = output.decode(errors='replace')
+        raise RuntimeError(f'Python environment bootstrap failed:\n{output.strip()}\n'
+                           'Use a Python installation with working venv/ensurepip support.') from error
+    return python
+
+
 def install(home, environment, source):
     if sys.version_info < (3, 10):
         raise ValueError('Python 3.10 or newer is required.')
@@ -166,10 +198,8 @@ def install(home, environment, source):
     claude = ensure_claude(home)
     destination = home / '.local' / 'share' / 'zai-claude-code'
     environment_directory = destination / 'venv'
-    python = environment_directory / ('Scripts' if windows else 'bin') / ('python.exe' if windows else 'python')
     destination.mkdir(parents=True, exist_ok=True)
-    if not python.exists():
-        venv.EnvBuilder(with_pip=True).create(environment_directory)
+    python = ensure_environment(environment_directory, windows)
     subprocess.run(
         [str(python), '-m', 'pip', 'install', '-r', str(source / 'requirements.txt')],
         check=True, timeout=1200,

@@ -8,6 +8,8 @@ python3 scripts/build_and_install_zai_claude_code.py
 
 On Windows, use `python` or `py -3` instead of `python3`. The script delegates to the existing cross-platform installer, keeping one source of truth; it does not build the proprietary CLI engine.
 
+Linux/macOS environments use symlinks so uv-managed Python retains its standard-library location. Re-running repairs an incomplete environment (including a missing pip) without removing other installed files. Windows keeps the standard copy-based environment. If bootstrapping still fails, the installer displays the underlying ensurepip output; ensure your Python distribution includes working `venv`/`ensurepip` support (Debian/Ubuntu system Python may require `python3-venv`).
+
 Without a checkout, this command clones the customization branch temporarily and runs the same script in Bash, Zsh, PowerShell, or Command Prompt:
 
 ```sh

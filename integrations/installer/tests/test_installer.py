@@ -119,12 +119,13 @@ class InstallerTests(unittest.TestCase):
                 python.touch()
             with patch.object(installer, 'ensure_claude', return_value=Path('/official/claude')), \
                     patch.object(installer.venv.EnvBuilder, 'create', side_effect=create_environment) as create, \
-                    patch.object(installer.subprocess, 'run') as run:
+                    patch.object(installer.subprocess, 'run',
+                                 return_value=subprocess.CompletedProcess([], 0)) as run:
                 installer.install(home, {'SHELL': '/bin/bash'}, source)
                 first = (home / '.profile').read_text()
                 installer.install(home, {'SHELL': '/bin/bash'}, source)
                 create.assert_called_once()
-                self.assertEqual(run.call_count, 2)
+                self.assertEqual(run.call_count, 3)
                 self.assertEqual(first, (home / '.profile').read_text())
             launcher = home / '.local/bin/zai-claude-code'
             self.assertTrue(os.access(launcher, os.X_OK))
@@ -155,11 +156,85 @@ class InstallerTests(unittest.TestCase):
             python.touch()
             with patch.object(installer, 'ensure_claude', return_value=Path('/official/claude')), \
                     patch.object(installer.subprocess, 'run',
-                                 side_effect=subprocess.CalledProcessError(1, 'pip')):
+                                 side_effect=[subprocess.CompletedProcess([], 0),
+                                              subprocess.CalledProcessError(1, 'pip')]):
                 with self.assertRaises(subprocess.CalledProcessError):
                     installer.install(home, {'SHELL': '/bin/bash'}, Path('/source'))
             self.assertFalse((home / '.local/bin/zai-claude-code').exists())
             self.assertFalse((home / '.profile').exists())
+
+
+class EnvironmentTests(unittest.TestCase):
+    def test_real_bootstrap_and_reuse(self):
+        with tempfile.TemporaryDirectory(prefix='zai-environment-test-') as temporary:
+            directory = Path(temporary) / 'venv'
+            python = installer.ensure_environment(directory, os.name == 'nt')
+            result = subprocess.run([str(python), '-I', '-m', 'pip', '--version'],
+                                    check=True, capture_output=True, text=True)
+            self.assertIn(str(directory), result.stdout)
+            if os.name != 'nt':
+                self.assertTrue(python.is_symlink())
+            with patch.object(installer.venv.EnvBuilder, 'create') as create:
+                self.assertEqual(installer.ensure_environment(directory, os.name == 'nt'), python)
+                create.assert_not_called()
+
+    def test_real_partial_environment_is_repaired_without_removing_other_files(self):
+        with tempfile.TemporaryDirectory(prefix='zai-environment-test-') as temporary:
+            directory = Path(temporary) / 'venv'
+            installer.venv.EnvBuilder(with_pip=False, symlinks=False).create(directory)
+            retained = directory / 'retained.txt'
+            retained.write_text('preserve installed data')
+            python = installer.ensure_environment(directory, os.name == 'nt')
+            subprocess.run([str(python), '-I', '-c', 'import pip'], check=True, timeout=30)
+            self.assertEqual(retained.read_text(), 'preserve installed data')
+            if os.name != 'nt':
+                self.assertTrue(python.is_symlink())
+
+    def test_bootstrap_error_includes_ensurepip_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch.object(installer.venv, 'EnvBuilder') as builder:
+                builder.return_value.create.side_effect = subprocess.CalledProcessError(
+                    1, 'ensurepip', output=b'actual bootstrap failure')
+                with self.assertRaisesRegex(RuntimeError, 'actual bootstrap failure'):
+                    installer.ensure_environment(Path(temporary) / 'venv', False)
+                builder.assert_called_once_with(with_pip=True, symlinks=True)
+
+    def test_windows_keeps_copy_based_environments(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch.object(installer.venv, 'EnvBuilder') as builder:
+                directory = Path(temporary) / 'venv'
+                self.assertEqual(installer.ensure_environment(directory, True),
+                                 directory / 'Scripts/python.exe')
+                builder.assert_called_once_with(with_pip=True, symlinks=False)
+
+    def test_refuses_to_remove_files_without_venv_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / 'venv'
+            executable = directory / 'bin/python'
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b'unrelated binary')
+            with patch.object(installer.subprocess, 'run',
+                              return_value=subprocess.CompletedProcess([], 1)):
+                with self.assertRaisesRegex(ValueError, 'pyvenv.cfg'):
+                    installer.ensure_environment(directory, False)
+            self.assertEqual(executable.read_bytes(), b'unrelated binary')
+
+    @unittest.skipUnless(os.name == 'posix', 'Symlink fixture requires POSIX')
+    def test_refuses_symlinked_environment_or_bin_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            external = root / 'external'
+            external.mkdir()
+            directory = root / 'venv'
+            directory.symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'symbolic-linked'):
+                installer.ensure_environment(directory, False)
+            directory.unlink()
+            directory.mkdir()
+            (directory / 'bin').symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'symbolic-linked'):
+                installer.ensure_environment(directory, False)
+            self.assertEqual(list(external.iterdir()), [])
 
 
 class CrossPlatformInstallerTests(unittest.TestCase):
@@ -273,13 +348,14 @@ class CrossPlatformInstallerTests(unittest.TestCase):
             with patch.object(installer.sys, 'platform', 'win32'), \
                     patch.object(installer, 'ensure_claude', return_value=Path('C:/Official/claude.exe')), \
                     patch.object(installer.venv.EnvBuilder, 'create', side_effect=create_environment) as create, \
-                    patch.object(installer.subprocess, 'run') as run, \
+                    patch.object(installer.subprocess, 'run',
+                                 return_value=subprocess.CompletedProcess([], 0)) as run, \
                     patch.object(installer, 'windows_launcher', return_value=installer.LAUNCHER_MARKER.encode()), \
                     patch.object(installer, 'persist_windows_path') as persist:
                 installer.install(home, {}, source)
                 installer.install(home, {}, source)
                 create.assert_called_once()
-                self.assertEqual(run.call_count, 2)
+                self.assertEqual(run.call_count, 3)
                 self.assertEqual(run.call_args.args[0][0], str(python))
                 self.assertEqual(persist.call_count, 2)
             self.assertTrue((home / '.local/bin/zai-claude-code.exe').exists())
