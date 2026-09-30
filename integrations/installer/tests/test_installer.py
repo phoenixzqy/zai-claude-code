@@ -61,7 +61,7 @@ class InstallerTests(unittest.TestCase):
             gateway = root / 'copilot.py'
             claude = root / 'official' / 'claude'
             launcher = root / 'launcher'
-            launcher.write_text(installer.launcher_text(python, gateway, claude))
+            launcher.write_text(installer.launcher_text(python, gateway, claude.parent))
             result = subprocess.check_output(['sh', str(launcher), 'login', '--tui', 'space arg'],
                                              env={'PATH': '/usr/bin:/bin'}, text=True)
             self.assertEqual(result.splitlines(),
@@ -127,7 +127,7 @@ class InstallerTests(unittest.TestCase):
                 create.assert_called_once()
                 self.assertEqual(run.call_count, 3)
                 self.assertEqual(first, (home / '.profile').read_text())
-            launcher = home / '.local/bin/zai-claude-code'
+            launcher = home / '.local/bin/claude'
             self.assertTrue(os.access(launcher, os.X_OK))
             self.assertEqual((home / '.local/share/zai-claude-code/copilot.py').read_text(),
                              (source / 'copilot.py').read_text())
@@ -136,17 +136,17 @@ class InstallerTests(unittest.TestCase):
     def test_refuses_unrelated_launcher_or_symlink(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
-            launcher = home / '.local/bin/zai-claude-code'
+            launcher = home / '.local/bin/claude'
             launcher.parent.mkdir(parents=True)
             launcher.write_text('unrelated')
-            with patch.object(installer, 'ensure_claude') as ensure:
+            with patch.object(installer, 'ensure_claude', return_value=home / 'official/claude') as ensure:
                 with self.assertRaisesRegex(ValueError, 'unrelated executable'):
                     installer.install(home, {'SHELL': '/bin/bash'}, Path('/source'))
                 launcher.unlink()
                 launcher.symlink_to(home / 'missing')
                 with self.assertRaisesRegex(ValueError, 'unrelated executable'):
                     installer.install(home, {'SHELL': '/bin/bash'}, Path('/source'))
-                ensure.assert_not_called()
+                ensure.assert_called_once()
 
     def test_dependency_failure_does_not_publish_launcher_or_path(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -160,8 +160,43 @@ class InstallerTests(unittest.TestCase):
                                               subprocess.CalledProcessError(1, 'pip')]):
                 with self.assertRaises(subprocess.CalledProcessError):
                     installer.install(home, {'SHELL': '/bin/bash'}, Path('/source'))
-            self.assertFalse((home / '.local/bin/zai-claude-code').exists())
+            self.assertFalse((home / '.local/bin/claude').exists())
             self.assertFalse((home / '.profile').exists())
+
+    def test_migration_preserves_native_cli_and_reinstall_does_not_recurse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            native = home / '.local/bin/claude'
+            native.parent.mkdir(parents=True)
+            native.write_text('original engine')
+            native.chmod(0o755)
+            legacy = native.with_name('zai-claude-code')
+            legacy.write_text(installer.LAUNCHER_MARKER)
+            source = home / 'source'
+            source.mkdir()
+            (source / 'copilot.py').write_text('gateway')
+            (source / 'requirements.txt').write_text('dependency==1')
+            with patch.object(installer.shutil, 'which', return_value=str(native)), \
+                    patch.object(installer, 'ensure_environment', return_value=Path('/venv/python')), \
+                    patch.object(installer.subprocess, 'run'):
+                installer.install(home, {'SHELL': '/bin/bash'}, source)
+                original = installer.ensure_claude(home)
+                self.assertNotEqual(original, native)
+                self.assertEqual(original.read_text(), 'original engine')
+                self.assertFalse(legacy.exists())
+                installer.install(home, {'SHELL': '/bin/bash'}, source)
+                self.assertEqual(installer.ensure_claude(home), original)
+                self.assertEqual(original.read_text(), 'original engine')
+
+    def test_path_prioritizes_custom_claude_over_existing_install(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = Path(temporary) / '.profile'
+            directory = Path(temporary) / 'bin'
+            installer.persist_path([profile], directory)
+            result = subprocess.check_output(['bash', '-c', 'source "$1"; source "$1"; printf "%s" "$PATH"',
+                                              'test', str(profile)],
+                                             env={'PATH': '/usr/bin:' + str(directory)}, text=True)
+            self.assertEqual(result, str(directory) + ':/usr/bin:' + str(directory))
 
 
 class EnvironmentTests(unittest.TestCase):
@@ -251,11 +286,11 @@ class CrossPlatformInstallerTests(unittest.TestCase):
                 installer.persist_windows_path(Path('C:/User/bin'))
             registry.SetValueEx.assert_called_once_with(
                 registry.CreateKeyEx.return_value.__enter__.return_value, 'Path', 0,
-                value_type, r'%TOOLS%\bin;C:\Existing;' + str(Path('C:/User/bin')))
+                value_type, str(Path('C:/User/bin')) + r';%TOOLS%\bin;C:\Existing')
             notify.assert_called_once()
 
     def test_windows_path_is_case_insensitive_and_idempotent(self):
-        registry = self.registry(r'C:\Existing;"c:\USER\BIN\";')
+        registry = self.registry(str(Path('C:/User/bin')) + r';C:\Existing;')
         with patch.dict(sys.modules, winreg=registry), \
                 patch.object(installer, 'notify_windows_environment'):
             installer.persist_windows_path(Path('C:/User/bin'))
@@ -268,6 +303,14 @@ class CrossPlatformInstallerTests(unittest.TestCase):
                 patch.object(installer, 'notify_windows_environment'):
             installer.persist_windows_path(Path('C:/User/bin'))
         self.assertEqual(registry.SetValueEx.call_args.args[3:], (2, str(Path('C:/User/bin'))))
+
+    def test_windows_path_moves_case_insensitive_match_to_front(self):
+        registry = self.registry(r'C:\Existing;"c:\USER\BIN\";')
+        with patch.dict(sys.modules, winreg=registry), \
+                patch.object(installer, 'notify_windows_environment'):
+            installer.persist_windows_path(Path('C:/User/bin'))
+        self.assertEqual(registry.SetValueEx.call_args.args[-1],
+                         str(Path('C:/User/bin')) + r';C:\Existing;')
 
     def test_invalid_windows_path_is_not_overwritten(self):
         registry = self.registry(123, 4)
@@ -311,10 +354,10 @@ class CrossPlatformInstallerTests(unittest.TestCase):
                 exec(command[4], {})
                 run_gateway.assert_called_once_with(str(gateway), run_name='__main__')
                 self.assertEqual(os.environ['PATH'], str(Path('C:/Official')) + os.pathsep + 'existing')
-            (stages[-1] / 'zai-claude-code.exe').write_bytes(b'native launcher')
+            (stages[-1] / 'claude.exe').write_bytes(b'native launcher')
         with patch.object(installer.subprocess, 'run', side_effect=generate):
             self.assertEqual(installer.windows_launcher(Path('python.exe'), gateway,
-                             Path('C:/Official/claude.exe')), b'native launcher')
+                             Path('C:/Official')), b'native launcher')
         self.assertFalse(stages[0].exists())
 
     def test_windows_launcher_failure_cleans_staging(self):
@@ -358,21 +401,21 @@ class CrossPlatformInstallerTests(unittest.TestCase):
                 self.assertEqual(run.call_count, 3)
                 self.assertEqual(run.call_args.args[0][0], str(python))
                 self.assertEqual(persist.call_count, 2)
-            self.assertTrue((home / '.local/bin/zai-claude-code.exe').exists())
+            self.assertTrue((home / '.local/bin/claude.exe').exists())
             self.assertFalse((home / '.profile').exists())
             self.assertEqual(list((home / '.local/bin').glob('.zai-claude-code-*')), [])
 
     def test_windows_refuses_unrelated_executable_before_installing(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
-            launcher = home / '.local/bin/zai-claude-code.exe'
+            launcher = home / '.local/bin/claude.exe'
             launcher.parent.mkdir(parents=True)
             launcher.write_bytes(b'unrelated executable')
             with patch.object(installer.sys, 'platform', 'win32'), \
-                    patch.object(installer, 'ensure_claude') as ensure:
+                    patch.object(installer, 'ensure_claude', return_value=home / 'official/claude.exe') as ensure:
                 with self.assertRaisesRegex(ValueError, 'unrelated executable'):
                     installer.install(home, {}, Path('/source'))
-                ensure.assert_not_called()
+                ensure.assert_called_once()
 
     def test_readme_one_liner_uses_same_interpreter_and_cleans_on_failure(self):
         readme = Path(__file__).resolve().parents[3] / 'README.md'

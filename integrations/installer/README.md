@@ -1,6 +1,6 @@
 # Source installer (Linux/macOS/Windows)
 
-Install our Copilot gateway from `zai-claude-code`, install the official Claude Code CLI if missing, and permanently add `~/.local/bin` to your Bash/Zsh or Windows user PATH. From the repository root:
+Install our customized `claude` command from `zai-claude-code`, install the official Claude Code CLI if missing, and prioritize `~/.local/bin` in your Bash/Zsh or Windows user PATH. From the repository root:
 
 ```sh
 python3 scripts/build_and_install_zai_claude_code.py
@@ -18,26 +18,33 @@ python -c "import pathlib, subprocess, sys, tempfile; temporary = tempfile.Tempo
 
 Requires Python 3.10+ with `venv`/pip, Git, and network access. Replace only the initial `python` with `python3` or `py -3` if needed; the child installer uses the same interpreter. Linux/macOS require Bash and a Bash or Zsh login shell (`SHELL`). Native Windows requires Windows PowerShell and Git for Windows (including Git Bash for the official CLI); WSL uses the Linux path. Other operating systems/shells are not supported by automatic setup.
 
-This downloads and executes code from this repository's current customization branch, pinned PyPI gateway dependencies, and (only if needed) `https://claude.ai/install.sh` or `https://claude.ai/install.ps1`, which redirect to `downloads.claude.ai`. Review those sources before running. Windows uses a process-only PowerShell execution-policy bypass for the official installer, not a persistent policy change. Run as your normal user, not with `sudo` or as Administrator. This is **not** a build of the proprietary Claude Code engine. The [privacy launcher](../privacy/README.md) is separate and is not activated by this installer; this installer does not promise analytics or TUI log-staging suppression.
+This downloads and executes code from this repository's current customization branch, pinned PyPI gateway dependencies, and (only if needed) `https://claude.ai/install.sh` or `https://claude.ai/install.ps1`, which redirect to `downloads.claude.ai`. Review those sources before running. Windows uses a process-only PowerShell execution-policy bypass for the official installer, not a persistent policy change. Run as your normal user, not with `sudo` or as Administrator. This is **not** a build of the proprietary Claude Code engine. The installed command applies the canonical privacy opt-outs using the [privacy launcher's](../privacy/README.md) environment handling; internal engine TUI log staging remains unverified.
 
 Open a new terminal after installation. On Linux/macOS, alternatively run `export PATH="$HOME/.local/bin:$PATH"` in the current one. On Windows, restart your terminal application; sign out/in if it retains a stale PATH. A child Python process cannot change its parent shell's PATH.
 
 ```sh
-zai-claude-code login          # command-line device login
-zai-claude-code login --tui    # full-screen device login
-zai-claude-code models
-zai-claude-code run --model MODEL_ID
-zai-claude-code logout
+claude
+claude --resume
+claude -p "Your prompt"
+claude copilot login
+claude copilot login --tui
+claude copilot models
+claude --model github-copilot/MODEL_ID
+claude copilot logout
 ```
 
-The `claude` executable is left unchanged. `zai-claude-code` forwards arguments to the [Copilot gateway](../github-copilot/README.md), which requires an entitled account. No login, credential copying, or paid model call happens during installation.
+Bare `claude` and native flags/subcommands launch the real CLI directly, inheriting your working directory, terminal, and authentication. `--settings` JSON or files remain supported; fork privacy settings take precedence. Copilot is opt-in through the `copilot` namespace or the `github-copilot/` model prefix; its gateway uses the same native UI. This does not add a native Copilot login screen or `/model` provider to the proprietary engine. No login, credential copying, or paid model call happens during installation.
+
+The engine's early `plugin test` entry point requires its original argument prefix; it is forwarded without added settings flags, while still applying the privacy environment. Custom settings are merged into a private, temporary settings file rather than exposing their contents in process arguments; that file is removed when the child exits. No terminal output is staged.
+
+The native executable is preserved at its resolved original path. If it is a regular file at the public launcher path, a copy is saved under the dedicated `native/` directory before replacement. The saved absolute path prevents recursion on reinstall. An installer-owned old `zai-claude-code` launcher is removed; unrelated files are never removed. If an official updater overwrites the wrapper, rerun this installer.
 
 Files installed:
 
-- `~/.local/bin/zai-claude-code` (Windows: `zai-claude-code.exe`): launcher, refusing to replace an unrelated executable or symlink. Windows uses pip's bundled distlib native executable launcher, not a batch script, so arguments do not pass through a command shell.
-- `~/.local/share/zai-claude-code/`: dedicated Python environment and gateway source snapshot, independent of the temporary clone.
+- `~/.local/bin/claude` (Windows: `claude.exe`): customized launcher. An existing CLI at this path is preserved before replacement; conflicting unrelated files and dangling symlinks are rejected. Windows uses pip's bundled distlib executable launcher, not a batch script.
+- `~/.local/share/zai-claude-code/`: dedicated Python environment, launcher/gateway/privacy source snapshots, canonical privacy settings snapshot, and `runtime.json` holding the native CLI path, independent of the temporary clone.
 - Bash: append-only PATH blocks in the existing `.bash_profile` or `.bash_login` (otherwise `.profile`) and `.bashrc`.
 - Zsh: append-only PATH blocks in `.zprofile` and `.zshrc`, respecting an absolute `ZDOTDIR` when set.
-- Windows: append only to `HKEY_CURRENT_USER\Environment\Path`, preserving existing entries and registry value type; system PATH is untouched. The dedicated environment uses `venv\Scripts\python.exe`.
+- Windows: prioritize the directory in `HKEY_CURRENT_USER\Environment\Path`, preserving other entries and registry value type; system PATH is untouched. A system-wide `claude` earlier in system PATH may still take precedence: check `where.exe claude`. The dedicated environment uses `venv\Scripts\python.exe`.
 
-Re-running updates the installed gateway/dependencies without duplicating PATH entries. Failed installs report nonzero status; a partial dedicated environment may remain for retry. Temporary clones, launcher staging, and downloaded official installer scripts are cleaned automatically, including on failure. For uninstall, remove the launcher and its dedicated share directory, and remove only the `# zai-claude-code PATH` blocks from the listed profiles (Windows: remove only the added directory from your user PATH). Credentials and the official CLI are separate and are not removed. Contributor CI tools/hooks are separate; see [local validation](../../docs/local-validation.md).
+Re-running updates the customization/dependencies without duplicating PATH blocks. Failed installs report nonzero status; a partial dedicated environment may remain for retry. Temporary clones, launcher staging, and downloaded official installer scripts are cleaned automatically, including on failure. For uninstall, first restore any `native/claude` backup to the public launcher path (otherwise remove only the wrapper), then remove its dedicated share directory and the `# zai-claude-code PATH` blocks (Windows: remove only the added directory from your user PATH). Keep credentials and the external official CLI. Contributor CI tools/hooks are separate; see [local validation](../../docs/local-validation.md).

@@ -1,6 +1,7 @@
 """Install the Copilot gateway and official CLI for the current user."""
 
 import argparse
+import json
 import os
 from pathlib import Path
 import shlex
@@ -36,7 +37,7 @@ def shell_profiles(home, environment):
 def path_block(bin_directory):
     return (
         f'{PATH_MARKER}\n'
-        f'case ":$PATH:" in *{shlex.quote(":" + str(bin_directory) + ":")}*) ;;\n'
+        f'case "$PATH" in {shlex.quote(str(bin_directory))}|{shlex.quote(str(bin_directory) + ":")}*) ;;\n'
         f'  *) export PATH={shlex.quote(str(bin_directory))}:"$PATH" ;;\n'
         'esac\n'
     )
@@ -83,20 +84,48 @@ def persist_windows_path(bin_directory):
         if ';' in directory:
             raise ValueError('The installation directory must not contain a semicolon.')
         normalized = ntpath.normcase(ntpath.normpath(directory))
-        entries = (ntpath.normcase(ntpath.normpath(os.path.expandvars(entry.strip().strip('"'))))
-                   for entry in previous.split(';') if entry.strip())
-        if normalized not in entries:
-            updated = previous + (';' if previous and not previous.endswith(';') else '') + directory
+        entries = previous.split(';') if previous else []
+        remaining = [entry for entry in entries
+                     if ntpath.normcase(ntpath.normpath(os.path.expandvars(entry.strip().strip('"')))) != normalized]
+        updated = directory + (';' + ';'.join(remaining) if remaining else '')
+        if updated != previous:
             winreg.SetValueEx(key, 'Path', 0, value_type, updated)
     notify_windows_environment()
+
+
+def owned_launcher(path):
+    if not path.is_file():
+        return False
+    with path.open('rb') as source:
+        source.seek(max(0, path.stat().st_size - 65536))
+        return LAUNCHER_MARKER.encode() in source.read()
+
+
+def publish(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix='.zai-claude-code-', dir=path.parent)
+    try:
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(content)
+        os.chmod(temporary, 0o755 if path.name in ('claude', 'claude.exe') else 0o600)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def ensure_claude(home):
     windows = sys.platform == 'win32'
     existing = shutil.which('claude.exe' if windows else 'claude')
+    local = home / '.local' / 'bin' / ('claude.exe' if windows else 'claude')
+    if owned_launcher(Path(existing) if existing else local):
+        runtime = home / '.local/share/zai-claude-code/runtime.json'
+        native = Path(json.loads(runtime.read_text())['claude_binary'])
+        if not native.is_absolute() or not native.is_file() or owned_launcher(native):
+            raise ValueError('Saved native Claude executable is missing or recursive.')
+        return native
     if existing:
         return Path(existing).absolute()
-    local = home / '.local' / 'bin' / ('claude.exe' if windows else 'claude')
     if local.is_file() and os.access(local, os.X_OK):
         return local
     url = WINDOWS_INSTALL_URL if windows else INSTALL_URL
@@ -116,32 +145,32 @@ def ensure_claude(home):
     return local
 
 
-def launcher_text(python, gateway, claude):
+def launcher_text(python, gateway, bin_directory):
     return (
         '#!/bin/sh\n'
         f'{LAUNCHER_MARKER}\n'
-        f'PATH={shlex.quote(str(claude.parent))}:"$PATH"\n'
+        f'PATH={shlex.quote(str(bin_directory))}:"$PATH"\n'
         'export PATH\n'
         f'exec {shlex.quote(str(python))} {shlex.quote(str(gateway))} "$@"\n'
     )
 
 
-def windows_launcher(python, gateway, claude):
+def windows_launcher(python, gateway, bin_directory):
     template = (
         f'{LAUNCHER_MARKER}\n'
         'import os, runpy\n'
-        f"os.environ['PATH'] = {str(claude.parent)!r} + os.pathsep + os.environ.get('PATH', '')\n"
+        f"os.environ['PATH'] = {str(bin_directory)!r} + os.pathsep + os.environ.get('PATH', '')\n"
         f"runpy.run_path({str(gateway)!r}, run_name='__main__')\n"
     )
     generator = (
         'import sys; from pip._vendor.distlib.scripts import ScriptMaker; '
         'maker = ScriptMaker(None, sys.argv[1]); maker.variants = {\'\'}; '
         "maker.script_template = sys.argv[2].replace('%', '%%'); "
-        "maker.make('zai-claude-code = copilot:main')"
+        "maker.make('claude = copilot:main')"
     )
     with tempfile.TemporaryDirectory(prefix='zai-claude-launcher-') as temporary:
         subprocess.run([str(python), '-c', generator, temporary, template], check=True, timeout=60)
-        return (Path(temporary) / 'zai-claude-code.exe').read_bytes()
+        return (Path(temporary) / 'claude.exe').read_bytes()
 
 
 def ensure_environment(directory, windows):
@@ -186,16 +215,16 @@ def install(home, environment, source):
     bin_directory = home / '.local' / 'bin'
     if windows and ';' in str(bin_directory):
         raise ValueError('The installation directory must not contain a semicolon.')
-    launcher = bin_directory / ('zai-claude-code.exe' if windows else 'zai-claude-code')
-    owned = (launcher.exists() and
-             (LAUNCHER_MARKER.encode() in launcher.read_bytes() if windows
-              else LAUNCHER_MARKER in launcher.read_text().splitlines()))
-    if launcher.is_symlink() or (launcher.exists() and not owned):
+    launcher = bin_directory / ('claude.exe' if windows else 'claude')
+    legacy = bin_directory / ('zai-claude-code.exe' if windows else 'zai-claude-code')
+    if launcher.is_symlink() and not launcher.exists():
         raise ValueError(f'Refusing to replace an unrelated executable: {launcher}')
     for profile in profiles:
         if profile.exists() and not os.access(profile, os.W_OK):
             raise ValueError(f'Shell profile is not writable: {profile}')
     claude = ensure_claude(home)
+    if launcher.exists() and not owned_launcher(launcher) and launcher.resolve() != claude.resolve():
+        raise ValueError(f'Refusing to replace an unrelated executable: {launcher}')
     destination = home / '.local' / 'share' / 'zai-claude-code'
     environment_directory = destination / 'venv'
     destination.mkdir(parents=True, exist_ok=True)
@@ -207,24 +236,31 @@ def install(home, environment, source):
     gateway = destination / 'copilot.py'
     shutil.copyfile(source / 'copilot.py', gateway)
     shutil.copyfile(source / 'requirements.txt', destination / 'requirements.txt')
-    content = windows_launcher(python, gateway, claude) if windows else launcher_text(python, gateway, claude).encode()
-    bin_directory.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix='.zai-claude-code-', dir=bin_directory)
-    try:
-        with os.fdopen(descriptor, 'wb') as output:
-            output.write(content)
-        os.chmod(temporary, 0o755)
-        os.replace(temporary, launcher)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    repository = Path(__file__).resolve().parents[2]
+    dispatcher = destination / 'claude.py'
+    shutil.copyfile(repository / 'integrations/installer/claude.py', dispatcher)
+    shutil.copyfile(repository / 'integrations/privacy/claude.py', destination / 'privacy.py')
+    shutil.copyfile(repository / '.claude/settings.json', destination / 'settings.json')
+    if claude.absolute() == launcher.absolute() and not launcher.is_symlink():
+        native = destination / 'native' / launcher.name
+        native.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(claude, native)
+        claude = native
+    else:
+        claude = claude.resolve()
+    publish(destination / 'runtime.json', json.dumps({'claude_binary': str(claude)}).encode())
+    content = windows_launcher(python, dispatcher, bin_directory) if windows else launcher_text(python, dispatcher, bin_directory).encode()
+    publish(launcher, content)
     if windows:
         persist_windows_path(bin_directory)
     else:
         persist_path(profiles, bin_directory)
     location = r'HKCU\Environment\Path' if windows else ', '.join(map(str, profiles))
+    if not legacy.is_symlink() and owned_launcher(legacy):
+        legacy.unlink()
     print(f'Installed {launcher}\nPermanent PATH configured in: {location}')
-    print('Open a new terminal, then run: zai-claude-code login --tui')
+    print('Open a new terminal, then run: claude')
+    print('Optional Copilot login: claude copilot login --tui')
     if not windows:
         print(f'In this terminal: export PATH={shlex.quote(str(bin_directory))}:"$PATH"')
 
@@ -233,7 +269,7 @@ def main():
     argparse.ArgumentParser(description=__doc__).parse_args()
     try:
         install(Path.home(), os.environ, Path(__file__).resolve().parents[1] / 'github-copilot')
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f'Installation failed: {error}', file=sys.stderr)
         return 1
     return 0
