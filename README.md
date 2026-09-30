@@ -1,103 +1,15 @@
-# Claude Code
+# zai-claude-code
 
-![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square) [![npm]](https://www.npmjs.com/package/@anthropic-ai/claude-code)
+A personal fork for learning and personal use, with a GitHub Copilot gateway for the official Claude Code CLI—not a source build of its proprietary engine.
 
-[npm]: https://img.shields.io/npm/v/@anthropic-ai/claude-code.svg?style=flat-square
+## Install (Linux/macOS)
 
-Claude Code is an agentic coding tool that lives in your terminal, understands your codebase, and helps you code faster by executing routine tasks, explaining complex code, and handling git workflows -- all through natural language commands. Use it in your terminal, IDE, or tag @claude on Github.
-
-**Learn more in the [official documentation](https://code.claude.com/docs/en/overview)**.
-
-## zai customizations
-
-In this fork, `main` is reserved for syncing upstream Claude Code. `zai-claude-code` is our integration branch for customizations; target customization PRs there unless explicitly asked otherwise. Coding-agent instructions and project skill discovery share one source through relative symbolic links; see [AGENTS.md](AGENTS.md).
-
-To use GitHub Copilot models with the installed Claude Code CLI, see the opt-in [GitHub Copilot gateway](integrations/github-copilot/README.md), including command-line and TUI device login. This is an external gateway, not native Claude Code authentication.
-
-### One-line source install (Linux/macOS)
-
-Installs our gateway and the official CLI if missing, with permanent Bash/Zsh PATH setup (not a source build of the proprietary engine):
+Requires Python 3.10+ and Git. Installs the gateway and the official CLI if missing, and permanently adds the launcher to your Bash/Zsh PATH:
 
 ```sh
 python3 -c 'import pathlib, subprocess, tempfile; temporary = tempfile.TemporaryDirectory(prefix="zai-claude-source-"); source = pathlib.Path(temporary.name) / "source"; subprocess.run(["git", "clone", "--depth", "1", "--branch", "zai-claude-code", "https://github.com/phoenixzqy/zai-claude-code.git", str(source)], check=True); subprocess.run(["python3", str(source / "integrations/installer/install.py")], check=True); temporary.cleanup()'
 ```
 
-Open a new terminal and run `zai-claude-code login --tui` (or `login` for command-line login), then `zai-claude-code models` and `zai-claude-code run --model MODEL_ID`. Requires Python 3.10+, Git, and a Copilot subscription. See [installer details](integrations/installer/README.md) for trust boundaries, prerequisites, installed files, and uninstall steps.
+Open a new terminal, then run `zai-claude-code login --tui` (or `login` for command-line login). Copilot usage requires an entitled account.
 
-<img src="./demo.gif" />
-
-## Get started
-> [!NOTE]
-> Installation via npm is deprecated. Use one of the recommended methods below.
-
-For more installation options, uninstall steps, and troubleshooting, see the [setup documentation](https://code.claude.com/docs/en/setup).
-
-1. Install Claude Code:
-
-    **MacOS/Linux (Recommended):**
-    ```bash
-    curl -fsSL https://claude.ai/install.sh | bash
-    ```
-
-    **Homebrew (MacOS/Linux):**
-    ```bash
-    brew install --cask claude-code
-    ```
-
-    **Windows (Recommended):**
-    ```powershell
-    irm https://claude.ai/install.ps1 | iex
-    ```
-
-    **WinGet (Windows):**
-    ```powershell
-    winget install Anthropic.ClaudeCode
-    ```
-
-    **NPM (Deprecated):**
-    ```bash
-    npm install -g @anthropic-ai/claude-code
-    ```
-
-2. Navigate to your project directory and run `claude`.
-
-## Customization branch privacy
-
-Our customizations target `zai-claude-code`; `main` is reserved for upstream synchronization. This branch's [telemetry mod](./mods/telemetry) discards plugin analytics, and `.claude/settings.json` contains our shared runtime privacy opt-outs. For startup protection in any project, launch the separately installed Claude Code through:
-
-```sh
-python3 /path/to/zai-claude-code/integrations/privacy/claude.py
-python3 /path/to/zai-claude-code/integrations/privacy/claude.py -- -p 'Explain this project'
-```
-
-The launcher disables analytics, OpenTelemetry exports, remote error reporting, feedback commands and surveys, and the TUI feedback entry points. This repository cannot patch or verify the proprietary engine's internal TUI log staging. See [privacy coverage and limitations](./integrations/privacy/README.md) before relying on it for strict isolation.
-
-## Local contributor validation
-
-`zai-claude-code` is our default customization branch; `main` mirrors upstream. Hosted Actions on customization branches are manual-only. Install the Git `pre-push` gate with `python .github/scripts/local_ci.py --install` after installing the prerequisites in [local validation](./docs/local-validation.md). Every non-deletion push validates a clean committed HEAD against the full suite. Use the shared [repo-sync skill](./.agents/skills/repo-sync/SKILL.md) for upstream updates, preserving our customizations during conflicts.
-
-## Plugins
-
-This repository includes several Claude Code plugins that extend functionality with custom commands and agents. See the [plugins directory](./plugins/README.md) for detailed documentation on available plugins.
-
-## Reporting Bugs
-
-We welcome your feedback. Use the `/bug` command to report issues directly within Claude Code, or file a [GitHub issue](https://github.com/anthropics/claude-code/issues).
-
-## Connect on Discord
-
-Join the [Claude Developers Discord](https://anthropic.com/discord) to connect with other developers using Claude Code. Get help, share feedback, and discuss your projects with the community.
-
-## Data collection, usage, and retention
-
-When you use Claude Code, we collect feedback, which includes usage data (such as code acceptance or rejections), associated conversation data, and user feedback submitted via the `/bug` command.
-
-### How we use your data
-
-See our [data usage policies](https://code.claude.com/docs/en/data-usage).
-
-### Privacy safeguards
-
-We have implemented several safeguards to protect your data, including limited retention periods for sensitive information, restricted access to user session data, and clear policies against using feedback for model training.
-
-For full details, please review our [Commercial Terms of Service](https://www.anthropic.com/legal/commercial-terms) and [Privacy Policy](https://www.anthropic.com/legal/privacy).
+See [installer details](integrations/installer/README.md) for prerequisites and downloaded-code trust considerations, and the [backup README](README.backup.md) for the full documentation.
