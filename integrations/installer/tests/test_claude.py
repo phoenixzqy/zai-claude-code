@@ -6,8 +6,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -100,6 +101,180 @@ class ClaudeLauncherTests(unittest.TestCase):
                 self.assertEqual(launcher.main(['copilot', *arguments]), 0)
                 gateway.assert_called_once_with(arguments)
                 execute.assert_not_called()
+
+    def test_interactive_start_offers_copilot_and_runs_selected_model(self):
+        available = [
+            {'id': 'no-tools'},
+            {'id': 'model-id', 'capabilities': {'supports': {'tool_calls': True}}},
+        ]
+        with patch.object(launcher.sys.stdin, 'isatty', return_value=True), \
+                patch.object(launcher.sys.stdout, 'isatty', return_value=True), \
+                patch.object(launcher, 'choose', side_effect=[1, 0]) as choose, \
+                patch.object(copilot, 'DEFAULT_STATE', self.directory / 'state'), \
+                patch.object(copilot, 'login') as login, \
+                patch.object(copilot, 'models', return_value=available), \
+                patch.object(copilot, 'run', return_value=7) as gateway, \
+                patch.object(launcher.os, 'execve') as execute:
+            self.assertEqual(launcher.main([]), 7)
+            self.assertIn('GitHub Copilot account', choose.call_args_list[0].args[1])
+            self.assertEqual(choose.call_args_list[1].args[1], ['model-id'])
+            login.assert_called_once_with(self.directory / 'state', tui=True)
+            gateway.assert_called_once_with(self.directory / 'state', 'model-id',
+                                            ['--settings', json.dumps(SETTINGS)])
+            execute.assert_not_called()
+
+    def test_saved_copilot_login_is_reused_but_explicit_login_reauthenticates(self):
+        (self.directory / 'access-token').write_text('fixture-only')
+        for arguments in ([], ['auth', 'login']):
+            with self.subTest(arguments=arguments), \
+                    patch.object(launcher.sys.stdin, 'isatty', return_value=True), \
+                    patch.object(launcher.sys.stdout, 'isatty', return_value=True), \
+                    patch.object(launcher, 'choose', side_effect=[1, 0]), \
+                    patch.object(copilot, 'DEFAULT_STATE', self.directory), \
+                    patch.object(copilot, 'login') as login, \
+                    patch.object(copilot, 'models', return_value=[
+                        {'id': 'model-id', 'capabilities': {'supports': {'tool_calls': True}}},
+                    ]) as models, \
+                    patch.object(copilot, 'run', return_value=0) as gateway, \
+                    patch.object(launcher.os, 'execve') as execute:
+                self.assertEqual(launcher.main(arguments), 0)
+                execute.assert_not_called()
+                if arguments:
+                    login.assert_called_once_with(self.directory, tui=True)
+                    models.assert_not_called()
+                    gateway.assert_not_called()
+                else:
+                    login.assert_not_called()
+                    gateway.assert_called_once()
+
+    def test_native_selection_preserves_startup_and_auth_login(self):
+        for arguments in ([], ['auth', 'login']):
+            with self.subTest(arguments=arguments), \
+                    patch.object(launcher.sys.stdin, 'isatty', return_value=True), \
+                    patch.object(launcher.sys.stdout, 'isatty', return_value=True), \
+                    patch.object(launcher, 'choose', return_value=0), \
+                    patch.object(copilot, 'login') as login, \
+                    patch.object(launcher.os, 'execve') as execute:
+                self.assertEqual(launcher.main(arguments), 0)
+                self.assertEqual(execute.call_args.args[1][3:], arguments)
+                login.assert_not_called()
+
+    def test_picker_does_not_intercept_native_flags_commands_or_piped_input(self):
+        for arguments in (['--resume'], ['--continue'], ['--help'], ['--version'],
+                          ['-p', 'prompt'], ['prompt'], ['--model', 'sonnet'],
+                          ['plugin', 'test', 'fixture']):
+            with self.subTest(arguments=arguments), \
+                    patch.object(launcher.sys.stdin, 'isatty', return_value=True), \
+                    patch.object(launcher.sys.stdout, 'isatty', return_value=True), \
+                    patch.object(launcher, 'choose') as choose, \
+                    patch.object(launcher.os, 'execve'):
+                self.assertEqual(launcher.main(arguments), 0)
+                choose.assert_not_called()
+        for stdin, stdout in ((False, True), (True, False), (False, False)):
+            with self.subTest(stdin=stdin, stdout=stdout), \
+                    patch.object(launcher.sys.stdin, 'isatty', return_value=stdin), \
+                    patch.object(launcher.sys.stdout, 'isatty', return_value=stdout), \
+                    patch.object(launcher, 'choose') as choose, \
+                    patch.object(launcher.os, 'execve'):
+                self.assertEqual(launcher.main([]), 0)
+                choose.assert_not_called()
+
+    def test_picker_cancellation_and_login_failure_do_not_launch_native(self):
+        for error, expected in ((KeyboardInterrupt(), 130), (copilot.CopilotError('Declined'), 1)):
+            with self.subTest(error=error), \
+                    patch.object(launcher.sys.stdin, 'isatty', return_value=True), \
+                    patch.object(launcher.sys.stdout, 'isatty', return_value=True), \
+                    patch.object(launcher, 'choose', side_effect=error), \
+                    patch.object(launcher.os, 'execve') as execute, \
+                    patch.object(copilot, 'run') as gateway:
+                self.assertEqual(launcher.main([]), expected)
+                execute.assert_not_called()
+                gateway.assert_not_called()
+
+    def test_picker_keyboard_navigation_and_cancellation(self):
+        for keys, expected in ((['down', '\r'], 1), (['up', '\n'], 2),
+                               (['3', '\r'], 2), (['x', 'j', 'k', '\r'], 0)):
+            with self.subTest(keys=keys), patch.object(launcher, 'terminal_keys') as keyboard:
+                keyboard.return_value.__enter__.return_value.side_effect = keys
+                self.assertEqual(launcher.choose('Fixture picker', ['one', 'two', 'three']), expected)
+        for key in ('\x1b', '\x03', 'q'):
+            with self.subTest(key=key), patch.object(launcher, 'terminal_keys') as keyboard:
+                keyboard.return_value.__enter__.return_value.return_value = key
+                with self.assertRaises(KeyboardInterrupt):
+                    launcher.choose('Fixture picker', ['one'])
+                keyboard.return_value.__exit__.assert_called_once()
+        with self.assertRaisesRegex(copilot.CopilotError, 'No tool-calling models'):
+            launcher.choose('Models', [])
+
+    def test_windows_keyboard_handles_extended_arrow_keys(self):
+        keyboard = Mock()
+        keyboard.getwch.side_effect = ['\xe0', 'P', '\x00', 'H', '\r', '\x1b']
+        with patch.object(launcher.os, 'name', 'nt'), patch.dict(sys.modules, msvcrt=keyboard):
+            with launcher.terminal_keys() as read_key:
+                self.assertEqual([read_key() for _ in range(4)], ['down', 'up', '\r', '\x1b'])
+
+    @unittest.skipUnless(os.name == 'posix', 'PTY regression requires POSIX')
+    def test_real_terminal_startup_selects_copilot_and_restores_terminal(self):
+        import fcntl
+        import pty
+        import select
+        import struct
+        import termios
+
+        script = self.directory / 'terminal_fixture.py'
+        script.write_text(
+            'import sys\nfrom unittest.mock import patch\n'
+            f'sys.path.insert(0, {str(ROOT / "integrations/installer/tests")!r})\n'
+            'from test_claude import launcher, copilot\n'
+            f'launcher.DIRECTORY = launcher.Path({str(self.directory)!r})\n'
+            'def login(state, tui=False):\n'
+            '    assert tui\n    print("DEVICE_LOGIN_TUI", flush=True)\n'
+            'def run(state, model, command):\n'
+            '    assert model == "fixture-model"\n'
+            '    print("COPILOT_NATIVE_UI", flush=True)\n    return 7\n'
+            'copilot.login = login\ncopilot.run = run\n'
+            f'copilot.DEFAULT_STATE = launcher.Path({str(self.directory / "state")!r})\n'
+            'copilot.models = lambda state: [{"id": "fixture-model", '
+            '"capabilities": {"supports": {"tool_calls": True}}}]\n'
+            'sys.exit(launcher.main([]))\n'
+        )
+        for cancel in (False, True):
+            with self.subTest(cancel=cancel):
+                master, slave = pty.openpty()
+                original = termios.tcgetattr(slave)
+                fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 100, 0, 0))
+                process = subprocess.Popen(
+                    [sys.executable, '-B', str(script)], stdin=slave, stdout=slave, stderr=slave,
+                    env={**os.environ, 'TERM': 'xterm-256color', 'NO_COLOR': '1'},
+                )
+                output = b''
+
+                def read_until(expected):
+                    nonlocal output
+                    deadline = time.monotonic() + 10
+                    while expected not in output and time.monotonic() < deadline:
+                        if select.select([master], [], [], 0.1)[0]:
+                            output += os.read(master, 65536)
+                    self.assertIn(expected, output)
+
+                try:
+                    read_until(b'GitHub Copilot account')
+                    os.write(master, b'\x1b' if cancel else b'\x1b[B\r')
+                    if not cancel:
+                        read_until(b'Select GitHub Copilot model')
+                        self.assertIn(b'DEVICE_LOGIN_TUI', output)
+                        os.write(master, b'\r')
+                        read_until(b'COPILOT_NATIVE_UI')
+                    read_until(b'\x1b[?1049l')
+                    self.assertEqual(process.wait(timeout=10), 130 if cancel else 7)
+                    self.assertEqual(termios.tcgetattr(slave), original)
+                    self.assertIn(b'\x1b[?1049l', output)
+                finally:
+                    if process.poll() is None:
+                        process.terminate()
+                        process.wait(timeout=10)
+                    os.close(master)
+                    os.close(slave)
 
     def test_copilot_model_starts_native_ui_without_recursive_routing(self):
         for option in (['--model', 'github-copilot/model-id'], ['--model=github-copilot/model-id']):

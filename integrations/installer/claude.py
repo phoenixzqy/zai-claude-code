@@ -2,6 +2,7 @@
 
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
 import sys
 import subprocess
@@ -12,6 +13,95 @@ import privacy
 
 
 DIRECTORY = Path(__file__).resolve().parent
+
+
+@contextmanager
+def terminal_keys():
+    if os.name == 'nt':
+        import msvcrt
+
+        def read_key():
+            key = msvcrt.getwch()
+            if key in ('\x00', '\xe0'):
+                return {'H': 'up', 'P': 'down'}.get(msvcrt.getwch(), '')
+            return key
+
+        yield read_key
+    else:
+        import select
+        import termios
+        import tty
+
+        descriptor = sys.stdin.fileno()
+        original = termios.tcgetattr(descriptor)
+
+        def read_key():
+            key = os.read(descriptor, 1).decode()
+            if key == '\x1b':
+                sequence = ''
+                for _ in range(2):
+                    if not select.select([descriptor], [], [], 0.1)[0]:
+                        break
+                    sequence += os.read(descriptor, 1).decode()
+                return {'[A': 'up', '[B': 'down', 'OA': 'up', 'OB': 'down'}.get(sequence, '\x1b')
+            if not key:
+                raise KeyboardInterrupt
+            return key
+
+        try:
+            tty.setcbreak(descriptor)
+            yield read_key
+        finally:
+            termios.tcsetattr(descriptor, termios.TCSADRAIN, original)
+
+
+def choose(title, choices):
+    from rich.console import Console
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.text import Text
+
+    if not choices:
+        raise copilot.CopilotError('No tool-calling models are available to this Copilot account.')
+    selected = 0
+    console = Console()
+    with Live(console=console, screen=True, auto_refresh=False) as display, terminal_keys() as read_key:
+        while True:
+            text = Text()
+            visible = max(1, console.size.height - 6)
+            start = max(0, selected - visible + 1)
+            for position in range(start, min(len(choices), start + visible)):
+                label = choices[position]
+                text.append(f'{" >" if position == selected else "  "} {position + 1}. {label}\n',
+                            style='bold cyan' if position == selected else '')
+            text.append('\nUp/Down to select, Enter to continue, Esc or Ctrl-C to cancel.')
+            display.update(Panel(text, title=title, border_style='blue'), refresh=True)
+            key = read_key()
+            if key in ('\r', '\n'):
+                return selected
+            if key in ('\x1b', '\x03', 'q'):
+                raise KeyboardInterrupt
+            if key in ('up', 'k'):
+                selected = (selected - 1) % len(choices)
+            elif key in ('down', 'j'):
+                selected = (selected + 1) % len(choices)
+            elif key and key in '123456789' and int(key) <= len(choices):
+                selected = int(key) - 1
+
+
+def interactive_provider(arguments):
+    return (not arguments or arguments == ['auth', 'login']) and sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def copilot_startup_model(arguments):
+    state = copilot.DEFAULT_STATE
+    if arguments == ['auth', 'login'] or not (state / 'access-token').is_file():
+        copilot.login(state, tui=True)
+    if arguments == ['auth', 'login']:
+        return None
+    available = [entry['id'] for entry in copilot.models(state)
+                 if entry.get('capabilities', {}).get('supports', {}).get('tool_calls')]
+    return available[choose('Select GitHub Copilot model', available)]
 
 
 def configured_arguments(arguments, settings):
@@ -83,6 +173,15 @@ def main(arguments=None):
         if arguments[:1] == ['copilot']:
             return copilot.main(arguments[1:])
         model, forwarded = copilot_arguments(arguments)
+        if interactive_provider(arguments):
+            provider = choose('Select login method', [
+                'Claude / Anthropic / 3rd-party platform (native Claude Code)',
+                'GitHub Copilot account',
+            ])
+            if provider == 1:
+                model = copilot_startup_model(arguments)
+                if arguments == ['auth', 'login']:
+                    return 0
         configured = configured_arguments(forwarded, settings)
         command = native_arguments(configured[2:], configured[1])
         if json.loads(configured[1]) != settings:
@@ -97,7 +196,7 @@ def main(arguments=None):
         if model:
             return copilot.run(copilot.DEFAULT_STATE, model, command)
         os.execve(str(binary), [str(binary), *command], environment)
-    except (OSError, ValueError, KeyError, TypeError, copilot.CopilotError) as error:
+    except (OSError, ValueError, KeyError, TypeError, ImportError, copilot.CopilotError) as error:
         print(f'Claude launcher: {error}', file=sys.stderr)
         return 1
     except KeyboardInterrupt:
